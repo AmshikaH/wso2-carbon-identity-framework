@@ -21,6 +21,7 @@ package org.wso2.carbon.identity.application.authentication.framework.session.ex
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.json.JSONObject;
+import org.osgi.annotation.bundle.Capability;
 import org.wso2.carbon.CarbonConstants;
 import org.wso2.carbon.identity.application.authentication.framework.cache.SessionContextCache;
 import org.wso2.carbon.identity.application.authentication.framework.cache.SessionContextCacheEntry;
@@ -50,11 +51,17 @@ import static org.wso2.carbon.identity.application.authentication.framework.sess
 import static org.wso2.carbon.identity.application.authentication.framework.session.extender.SessionExtenderConstants.SUCCESS;
 import static org.wso2.carbon.identity.application.authentication.framework.session.extender.SessionExtenderConstants.TENANT_DOMAIN;
 import static org.wso2.carbon.identity.application.authentication.framework.session.extender.SessionExtenderConstants.TRACE_ID;
-import static org.wso2.carbon.utils.CarbonUtils.isLegacyAuditLogsDisabled;
 
 /**
  * Processes the Session Extender requests and extends session if the request is valid.
  */
+@Capability(
+        namespace = "osgi.service",
+        attribute = {
+                "objectClass=org.wso2.carbon.identity.application.authentication.framework.inbound.IdentityProcessor",
+                "service.scope=singleton"
+        }
+)
 public class SessionExtenderProcessor extends IdentityProcessor {
 
     private static final Log log = LogFactory.getLog(SessionExtenderProcessor.class);
@@ -200,9 +207,6 @@ public class SessionExtenderProcessor extends IdentityProcessor {
 
     private void addAuditLogs(String sessionKey, String tenantDomain, String traceId) {
 
-        if (isLegacyAuditLogsDisabled()) {
-            return;
-        }
         JSONObject auditData = new JSONObject();
         auditData.put(SESSION_CONTEXT_ID, sessionKey);
         auditData.put(TENANT_DOMAIN, tenantDomain);

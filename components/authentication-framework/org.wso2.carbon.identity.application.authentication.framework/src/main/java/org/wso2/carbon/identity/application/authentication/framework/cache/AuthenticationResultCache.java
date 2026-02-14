@@ -18,10 +18,13 @@
 
 package org.wso2.carbon.identity.application.authentication.framework.cache;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.identity.application.authentication.framework.store.SessionDataStore;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 
@@ -93,12 +96,36 @@ public class AuthenticationResultCache extends
      * @return Cached entry.
      */
     public AuthenticationResultCacheEntry getValueFromCache(AuthenticationResultCacheKey key) {
+
         AuthenticationResultCacheEntry entry = super.getValueFromCache(key);
         if (entry == null && isTemporarySessionDataPersistEnabled) {
             entry = (AuthenticationResultCacheEntry) SessionDataStore.getInstance().
                     getSessionData(key.getResultId(), CACHE_NAME);
+            if (entry != null && isCacheEntryExpired(entry)) {
+                return null;
+            }
         }
         return entry;
+    }
+
+    private boolean isCacheEntryExpired(AuthenticationResultCacheEntry entry) {
+
+        String cacheCreatedTimestamp;
+        if (entry.getResult().getProperty(FrameworkConstants.UPDATED_TIMESTAMP) != null) {
+            cacheCreatedTimestamp = entry.getResult().getProperty(FrameworkConstants.UPDATED_TIMESTAMP).toString();
+        } else if (entry.getResult().getProperty(FrameworkConstants.CREATED_TIMESTAMP) != null) {
+            cacheCreatedTimestamp = entry.getResult().getProperty(FrameworkConstants.CREATED_TIMESTAMP).toString();
+        } else {
+            log.warn("Cache entry does not have a created or updated timestamp.");
+            return false;
+        }
+        if (StringUtils.isNotBlank(cacheCreatedTimestamp) &&
+                (FrameworkUtils.getCurrentStandardNano() >
+                    entry.getValidityPeriod() + Long.parseLong(cacheCreatedTimestamp) * 1000000)) {
+            log.warn("Authentication result cache is expired");
+            return true;
+        }
+        return false;
     }
 
     /**

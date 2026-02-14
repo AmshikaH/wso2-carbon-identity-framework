@@ -19,6 +19,7 @@
 package org.wso2.carbon.identity.application.authentication.framework.handler.request.impl;
 
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -36,6 +37,7 @@ import org.wso2.carbon.identity.application.authentication.framework.config.mode
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthHistory;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
 import org.wso2.carbon.identity.application.authentication.framework.context.SessionContext;
+import org.wso2.carbon.identity.application.authentication.framework.exception.DuplicatedAuthUserException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.FrameworkException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.PostAuthenticationFailedException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.UserIdNotFoundException;
@@ -48,6 +50,7 @@ import org.wso2.carbon.identity.application.authentication.framework.model.Authe
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticationContextProperty;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticationResult;
 import org.wso2.carbon.identity.application.authentication.framework.model.CommonAuthResponseWrapper;
+import org.wso2.carbon.identity.application.authentication.framework.model.FederatedToken;
 import org.wso2.carbon.identity.application.authentication.framework.services.PostAuthenticationMgtService;
 import org.wso2.carbon.identity.application.authentication.framework.store.UserSessionStore;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
@@ -63,6 +66,7 @@ import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.idp.mgt.IdentityProviderManagementException;
 import org.wso2.carbon.idp.mgt.IdentityProviderManager;
 import org.wso2.carbon.idp.mgt.util.IdPManagementUtil;
+import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.config.UserStorePreferenceOrderSupplier;
 import org.wso2.carbon.user.core.model.UserMgtContext;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
@@ -78,6 +82,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
@@ -87,6 +92,7 @@ import javax.servlet.http.HttpServletResponse;
 import static java.util.Objects.nonNull;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ALLOW_SESSION_CREATION;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ORGANIZATION_USER_PROPERTIES;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkErrorConstants.ErrorMessages.ERROR_MISMATCHING_TENANT_DOMAIN;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkErrorConstants.ErrorMessages.ERROR_WHILE_CONCLUDING_AUTHENTICATION_SUBJECT_ID_NULL;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkErrorConstants.ErrorMessages.ERROR_WHILE_CONCLUDING_AUTHENTICATION_USER_ID_NULL;
 import static org.wso2.carbon.identity.application.authentication.framework.util.SessionNonceCookieUtil.NONCE_ERROR_CODE;
@@ -95,7 +101,6 @@ import static org.wso2.carbon.identity.application.authentication.framework.util
 import static org.wso2.carbon.identity.application.authentication.framework.util.SessionNonceCookieUtil.isNonceCookieEnabled;
 import static org.wso2.carbon.identity.application.authentication.framework.util.SessionNonceCookieUtil.removeNonceCookie;
 import static org.wso2.carbon.identity.application.authentication.framework.util.SessionNonceCookieUtil.validateNonceCookie;
-import static org.wso2.carbon.utils.CarbonUtils.isLegacyAuditLogsDisabled;
 
 /**
  * Default authentication request handler.
@@ -105,6 +110,7 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
     public static final String AUTHZ_FAIL_REASON = "AUTHZ_FAIL_REASON";
     private static final Log log = LogFactory.getLog(DefaultAuthenticationRequestHandler.class);
     private static final Log AUDIT_LOG = CarbonConstants.AUDIT_LOG;
+    private static final String COMMA = ",";
     private static volatile DefaultAuthenticationRequestHandler instance;
 
     public static DefaultAuthenticationRequestHandler getInstance() {
@@ -388,8 +394,8 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
                 if (StringUtils.isNotEmpty(userTenantDomain)) {
                     if (StringUtils.isNotEmpty(spTenantDomain) && !spTenantDomain.equals
                             (userTenantDomain)) {
-                        throw new FrameworkException("Service Provider tenant domain must be equal to user tenant " +
-                                "domain for non-SaaS applications");
+                        throw new FrameworkException(ERROR_MISMATCHING_TENANT_DOMAIN.getCode(),
+                                ERROR_MISMATCHING_TENANT_DOMAIN.getMessage());
                     }
                 }
             }
@@ -491,6 +497,8 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
             }
 
             String applicationTenantDomain = getApplicationTenantDomain(context);
+            String sessionKey = UUID.randomUUID().toString();
+            log.debug("Generated new session key for authentication flow");
             // session context may be null when cache expires therefore creating new cookie as well.
             if (sessionContext != null) {
                 analyticsSessionAction = FrameworkConstants.AnalyticsAttributes.SESSION_UPDATE;
@@ -530,6 +538,11 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
                 Long createdTime = (Long) sessionContext.getProperty(FrameworkConstants.CREATED_TIMESTAMP);
                 if (createdTime != null) {
                     authenticationResult.addProperty(FrameworkConstants.CREATED_TIMESTAMP, createdTime);
+                }
+
+                Long updatedTime = (Long) sessionContext.getProperty(FrameworkConstants.UPDATED_TIMESTAMP);
+                if (updatedTime != null) {
+                    authenticationResult.addProperty(FrameworkConstants.UPDATED_TIMESTAMP, updatedTime);
                 }
 
                 // Authentication context properties received from newly authenticated IdPs
@@ -581,9 +594,8 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
                 FrameworkUtils.addSessionContextToCache(sessionContextKey, sessionContext, applicationTenantDomain,
                         context.getLoginTenantDomain());
                 // Since the session context is already available, audit log will be added with updated details.
-                addAuditLogs(SessionMgtConstants.UPDATE_SESSION_ACTION,
-                        authenticationResult.getSubject().getUserName(), sessionContextKey,
-                        authenticationResult.getSubject().getTenantDomain(), FrameworkUtils.getCorrelation(),
+                addAuditLogs(SessionMgtConstants.UPDATE_SESSION_ACTION, authenticationResult.getSubject(),
+                        sessionContextKey, FrameworkUtils.getCorrelation(),
                         updatedSessionTime, sessionContext.isRememberMe());
             } else {
                 analyticsSessionAction = FrameworkConstants.AnalyticsAttributes.SESSION_CREATE;
@@ -606,7 +618,6 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
                     sessionContext.addProperty(FrameworkConstants.AUTHENTICATION_CONTEXT_PROPERTIES,
                             context.getProperty(FrameworkConstants.AUTHENTICATION_CONTEXT_PROPERTIES));
                 }
-                String sessionKey = UUID.randomUUID().toString();
                 sessionContextKey = DigestUtils.sha256Hex(sessionKey);
                 sessionContext.addProperty(FrameworkConstants.AUTHENTICATED_USER, authenticationResult.getSubject());
                 sessionContext.addProperty(FrameworkUtils.TENANT_DOMAIN, context.getLoginTenantDomain());
@@ -630,8 +641,7 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
                 // The session context will be stored from here. Since the audit log will be logged as a storing
                 // operation.
                 addAuditLogs(SessionMgtConstants.STORE_SESSION_ACTION,
-                        authenticationResult.getSubject().getUserName(), sessionContextKey,
-                        authenticationResult.getSubject().getTenantDomain(), FrameworkUtils.getCorrelation(),
+                        authenticationResult.getSubject(), sessionContextKey, FrameworkUtils.getCorrelation(),
                         createdTimeMillis, sessionContext.isRememberMe());
                 if (request.getAttribute(ALLOW_SESSION_CREATION) == null
                         || Boolean.parseBoolean(request.getAttribute(ALLOW_SESSION_CREATION).toString())) {
@@ -692,7 +702,43 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
             }
             FrameworkUtils.publishSessionEvent(sessionContextKey, request, context, sessionContext, sequenceConfig
                         .getAuthenticatedUser(), analyticsSessionAction);
+            SessionContext cachedSessionContext =
+                    FrameworkUtils.getSessionContextFromCache(sessionContextKey, context.getLoginTenantDomain());
+            if (cachedSessionContext != null) {
+                /*
+                 In a B2B scenario, when the remember me option is set by the user, it needs to be updated in the
+                 root organization session as well. This will happen by setting the expiry time for the
+                 commonAuthId cookie. Since the commonAuthId cookie is set in a previous step, from here it will
+                 be updated to keep the remember me option in the root organization as well.
+                */
+                if (cachedSessionContext.isRememberMe() && !context.isRememberMe()) {
+                    log.debug("Updating remember me option for root organization session");
+                    context.setRememberMe(cachedSessionContext.isRememberMe());
+                    setAuthCookie(request, response, context, sessionKey, applicationTenantDomain);
+                }
+            }
             publishAuthenticationSuccess(request, context, sequenceConfig.getAuthenticatedUser());
+        }
+
+        // Passing the federated tokens to the authentication result.
+        if (context.getProperty(FrameworkConstants.FEDERATED_TOKENS) instanceof List) {
+            authenticationResult.addProperty(FrameworkConstants.FEDERATED_TOKENS,
+                    context.getProperty(FrameworkConstants.FEDERATED_TOKENS));
+
+            if (log.isDebugEnabled()) {
+                List<String> federatedAuthenticatorNames = getFederatedAuthenticatorName(
+                        (List<FederatedToken>) context.getProperty(FrameworkConstants.FEDERATED_TOKENS));
+                log.debug("Federated tokens are available in the authentication context for the IDP: " +
+                        StringUtils.join(federatedAuthenticatorNames, COMMA) +
+                        " and added to the authentication result");
+            }
+        }
+
+        // Adding locally mapped remote claims to authentication results.
+        if (context.getProperty(FrameworkConstants.UNFILTERED_SP_CLAIM_VALUES) instanceof Map) {
+            Map<String, String> mappedRemoteClaims =
+                    (Map<String, String>) context.getProperty(FrameworkConstants.UNFILTERED_SP_CLAIM_VALUES);
+            authenticationResult.setMappedRemoteClaims(mappedRemoteClaims);
         }
 
         // Checking weather inbound protocol is an already cache removed one, request come from federated or other
@@ -890,7 +936,17 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
                                         user.getUserStoreDomain(), user.getUserName());
                         if (StringUtils.isNotEmpty(localUserId) &&
                                 !UserSessionStore.getInstance().isExistingMapping(localUserId, sessionContextKey)) {
-                            UserSessionStore.getInstance().storeUserSessionData(localUserId, sessionContextKey);
+                            try {
+                                UserSessionStore.getInstance().storeUserSessionData(localUserId, sessionContextKey);
+                            } catch (DuplicatedAuthUserException e) {
+                                // If isExistingMapping return false due to a database write latency issue,
+                                // the same user to session mapping will be persisted from the same node handling the
+                                // request. Thus, persisting the user to session mapping can be gracefully ignored here.
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Mapping between session Id: " + sessionContextKey + " and user Id: "
+                                            + userId + " is already persisted.");
+                                }
+                            }
                         }
                     }
                 } catch (UserSessionException e) {
@@ -1028,8 +1084,24 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
         }
         String path = null;
         if (IdentityTenantUtil.isTenantedSessionsEnabled()) {
-            if (FrameworkUtils.isOrganizationQualifiedRequest()) {
-                path = FrameworkConstants.ORGANIZATION_CONTEXT_PREFIX + context.getLoginTenantDomain() + "/";
+            String appResidentOrgId = PrivilegedCarbonContext.getThreadLocalCarbonContext()
+                    .getApplicationResidentOrganizationId();
+            if (StringUtils.isNotBlank(appResidentOrgId)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Resolving cookie path for application resides in organization: "
+                            + appResidentOrgId + " by using the primary organization");
+                }
+                tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
+                if (!IdentityTenantUtil.isSuperTenantAppendInCookiePath() &&
+                        MultitenantConstants.SUPER_TENANT_DOMAIN_NAME.equals(tenantDomain)) {
+                    path = "/";
+                } else {
+                    path = FrameworkConstants.TENANT_CONTEXT_PREFIX + tenantDomain + "/";
+                }
+            } else if (FrameworkUtils.isOrganizationQualifiedRequest()) {
+                // Handling the cookie path for requests coming with the path `/o/<org-id>`.
+                String organizationId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getOrganizationId();
+                path = FrameworkConstants.ORGANIZATION_CONTEXT_PREFIX + organizationId + "/";
             } else {
                 if (!IdentityTenantUtil.isSuperTenantAppendInCookiePath() &&
                         MultitenantConstants.SUPER_TENANT_DOMAIN_NAME.equals(context.getLoginTenantDomain())) {
@@ -1200,13 +1272,19 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
         sessionContext.setAuthenticatedIdPsOfApp(applicationName, authenticatedIdPDataMap);
     }
 
-    private void addAuditLogs(String sessionAction, String authenticatedUser, String sessionKey,
-                              String userTenantDomain, String traceId, Long lastAccessedTimestamp,
-                              boolean isRememberMe) {
+    private void addAuditLogs(String sessionAction, AuthenticatedUser authenticatedUser, String sessionKey,
+                              String traceId, Long lastAccessedTimestamp, boolean isRememberMe) {
 
-        if (isLegacyAuditLogsDisabled()) {
+        if (LoggerUtils.isEnableV2AuditLogs()) {
             return;
         }
+        String userTenantDomain = authenticatedUser.getTenantDomain();
+        boolean isFederated = authenticatedUser.isFederatedUser();
+        String username = authenticatedUser.getUserName();
+        if (!isFederated) {
+            username = authenticatedUser.getUserStoreDomain() + UserCoreConstants.DOMAIN_SEPARATOR + username;
+        }
+
         JSONObject auditData = new JSONObject();
         auditData.put(SessionMgtConstants.SESSION_CONTEXT_ID, sessionKey);
         auditData.put(SessionMgtConstants.REMEMBER_ME, isRememberMe);
@@ -1215,22 +1293,42 @@ public class DefaultAuthenticationRequestHandler implements AuthenticationReques
 
         String initiator = null;
         if (LoggerUtils.isLogMaskingEnable) {
-            String maskedUsername = LoggerUtils.getMaskedContent(authenticatedUser);
+            String maskedUsername = LoggerUtils.getMaskedContent(username);
             auditData.put(SessionMgtConstants.AUTHENTICATED_USER, maskedUsername);
-            if (StringUtils.isNotBlank(authenticatedUser) && StringUtils.isNotBlank(userTenantDomain)) {
-                initiator = IdentityUtil.getInitiatorId(authenticatedUser, userTenantDomain);
+            /* Not resolving the initiatorId for federated users since the subject returned from the external IDP
+             * can be set to any identifier based on the IdP. Authenticated user's subject identifier is sent as the
+             * username and initiatorId, and It could contain PII information. Therefore, the initiatorId will be set
+             * as the masked username for federated users.
+             */
+            if (!isFederated && StringUtils.isNotBlank(username) && StringUtils.isNotBlank(userTenantDomain)) {
+                initiator = IdentityUtil.getInitiatorId(username, userTenantDomain);
             }
             if (StringUtils.isBlank(initiator)) {
                 initiator = maskedUsername;
             }
         } else {
-            auditData.put(SessionMgtConstants.AUTHENTICATED_USER, authenticatedUser);
-            initiator = authenticatedUser;
+            auditData.put(SessionMgtConstants.AUTHENTICATED_USER, username);
+            initiator = username;
         }
         /* When the action is StoreSession, the LastAccessedTimestamp means the session created timestamp. If the
          action is UpdateSession, the LastAccessedTimestamp means the session's last accessed timestamp. */
         auditData.put(SessionMgtConstants.SESSION_LAST_ACCESSED_TIMESTAMP, lastAccessedTimestamp);
         AUDIT_LOG.info(String.format(SessionMgtConstants.AUDIT_MESSAGE_TEMPLATE, initiator,
                 sessionAction, auditData, SessionMgtConstants.SUCCESS));
+    }
+
+    /**
+     * This method returns the list of federated authenticator names bounded to the
+     * federated_tokens property in the authentication context.
+     *
+     * @param federatedTokens The list of federated tokens.
+     * @return List of the federated authenticator names.
+     */
+    private List<String> getFederatedAuthenticatorName(List<FederatedToken> federatedTokens) {
+
+        if (CollectionUtils.isEmpty(federatedTokens)) {
+            return null;
+        }
+        return federatedTokens.stream().map(FederatedToken::getIdp).collect(Collectors.toList());
     }
 }

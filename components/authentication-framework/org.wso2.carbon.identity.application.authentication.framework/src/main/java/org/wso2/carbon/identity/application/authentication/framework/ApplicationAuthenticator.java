@@ -24,6 +24,7 @@ import org.wso2.carbon.identity.application.authentication.framework.exception.A
 import org.wso2.carbon.identity.application.authentication.framework.exception.LogoutFailedException;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatorData;
 import org.wso2.carbon.identity.application.common.model.Property;
+import org.wso2.carbon.identity.base.AuthenticatorPropertyConstants.DefinedByType;
 
 import java.io.Serializable;
 import java.util.List;
@@ -171,4 +172,42 @@ public interface ApplicationAuthenticator extends Serializable {
         return StringUtils.EMPTY;
     }
 
+    /**
+     * Get the authenticator type. Default value will be SYSTEM.
+     *
+     * @return Authenticator Type.
+     */
+    default DefinedByType getDefinedByType() {
+
+        return DefinedByType.SYSTEM;
+    }
+
+    /**
+     * Check whether the authenticator can handle the request with user assertion.
+     *
+     * @param request  HTTP servlet request.
+     * @param response HTTP servlet response.
+     * @param context  Authentication context.
+     * @return true if the authenticator can handle the request with user assertion, false otherwise.
+     */
+    default boolean canHandleWithUserAssertion(HttpServletRequest request, HttpServletResponse response,
+                                             AuthenticationContext context) {
+
+        return false;
+    }
+
+    /**
+     * Check whether the authenticator requires authentication for the given request.
+     *
+     * @param request  HTTP servlet request.
+     * @param response HTTP servlet response.
+     * @param context  Authentication context.
+     * @return true if authentication is required, false otherwise.
+     * @throws AuthenticationFailedException If an error occurs while checking authentication requirement.
+     */
+    default boolean isAuthenticationRequired(HttpServletRequest request, HttpServletResponse response,
+                                             AuthenticationContext context) throws AuthenticationFailedException {
+
+        return true;
+    }
 }

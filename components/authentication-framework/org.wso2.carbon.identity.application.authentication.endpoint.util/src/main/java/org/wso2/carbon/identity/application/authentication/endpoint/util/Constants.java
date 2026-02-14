@@ -58,7 +58,8 @@ public class Constants {
     public static final String ACCOUNT_RECOVERY_REST_ENDPOINT_URL = "AccountRecoveryRESTEndpointURL";
     public static final String ENABLE_AUTHENTICATION_WITH_REST_API = "EnableAuthenticationWithAuthenticationRESTAPI";
     public static final String AUTHENTICATION_REST_ENDPOINT_URL = "AuthenticationRESTEndpointURL";
-
+    public static final String AUTHENTICATOR_VALIDATION_ENABLED = "AuthenticatorValidationEnabled";
+    public static final String DEFAULT_AUTHENTICATORS = "DefaultAuthenticators";
 
     public static final String HTTPS_URL = "https://";
     public static final String HOST = "identity.server.host";
@@ -72,6 +73,7 @@ public class Constants {
     public static final String CONFIG_GOOGLE_ONETAP_RESTRICTED_BROWSERS = "google.social.onetap.restricted_browsers";
     public static final String CONFIG_HOSTNAME_VERIFICATION_ENABLED = "hostname.verification.enabled";
     public static final String SERVICE_CONTEXT_PATH = "/services";
+    public static final String IDF_AUTHENTICATOR_NAME = "IdentifierExecutor:LOCAL";
 
     private Constants() {
 
@@ -146,10 +148,10 @@ public class Constants {
         public static final String INVALID_CLIENT_APP_NOT_FOUND_I18N_KEY = "application.not.found";
         public static final String INVALID_REQUEST_INVALID_REDIRECT_URI = "invalid_request_invalid.redirect.uri";
         public static final String INVALID_REQUEST_INVALID_REDIRECT_URI_I18N_KEY = "invalid.redirect.uri";
-        public static final String INVALID_REQUEST_INVALID_PAR_REQUEST_URI = "invalid_request_par.invalid.request.uri";
+        public static final String INVALID_REQUEST_INVALID_PAR_REQUEST_URI = "invalid_request_uri_par.invalid.request.uri";
         public static final String INVALID_REQUEST_INVALID_PAR_REQUEST_URI_I18N_KEY = "par.invalid.request.uri";
         public static final String INVALID_REQUEST_PAR_REQUEST_URI_EXPIRED =
-                "invalid_request_par.request.uri.expired";
+                "invalid_request_uri_par.request.uri.expired";
         public static final String INVALID_REQUEST_PAR_REQUEST_URI_EXPIRED_I18N_KEY =
                 "par.request.uri.expired";
         public static final String INVALID_REQUEST_PAR_CLIENT_ID_NOT_MATCH = "invalid_request_par.client.id.not.match";
@@ -277,6 +279,10 @@ public class Constants {
                 "authentication.context.null_authentication.context.null.description";
         public static final String AUTHENTICATION_CONTEXT_NULL_AUTHENTICATION_CONTEXT_NULL_DESCRIPTION_I18N_KEY =
                 "authentication.context.null";
+        public static final String APPLICATION_DISABLED_APPLICATION_DISABLED_DESCRIPTION =
+                "authentication.flow.app.disabled_authentication.flow.app.disabled.description";
+        public static final String APPLICATION_DISABLED_APPLICATION_DISABLED_DESCRIPTION_I18N_KEY =
+                "authentication.flow.app.disabled";
         public static final String AUTHENTICATION_FLOW_TIMEOUT_AUTHENTICATION_FLOW_TIMEOUT_DESCRIPTION =
                 "authentication.flow.timeout_authentication.flow.timeout.description";
         public static final String AUTHENTICATION_FLOW_TIMEOUT_AUTHENTICATION_FLOW_TIMEOUT_DESCRIPTION_I18N_KEY =
@@ -285,6 +291,10 @@ public class Constants {
                 "invalid_request_invalid.response.type.for.query.jwt";
         public static final String INVALID_RESPONSE_TYPE_FOR_QUERY_JWT_DESCRIPTION_I18N_KEY =
                 "invalid.response.type.for.query.jwt";
+        public static final String INVALID_RESPONSE_TYPE_FOR_HYBRID_FLOW_DESCRIPTION =
+                "invalid_client_invalid.response.type.for.hybrid.flow";
+        public static final String INVALID_RESPONSE_TYPE_FOR_HYBRID_FLOW_DESCRIPTION_I18N_KEY =
+                "invalid.response.type.for.hybrid.flow";
 
         public static final Map<String, String> ERROR_TO_I18N_MAP = new HashMap<>();
 
@@ -383,10 +393,14 @@ public class Constants {
                     Constants.ErrorToi18nMappingConstants.CLIENT_NOT_AUTHORIZED_TO_USE_REQUESTED_GRANT_TYPE_I18N_KEY);
             ERROR_TO_I18N_MAP.put(Constants.ErrorToi18nMappingConstants.AUTHENTICATION_CONTEXT_NULL_AUTHENTICATION_CONTEXT_NULL_DESCRIPTION,
                     Constants.ErrorToi18nMappingConstants.AUTHENTICATION_CONTEXT_NULL_AUTHENTICATION_CONTEXT_NULL_DESCRIPTION_I18N_KEY);
+            ERROR_TO_I18N_MAP.put(ErrorToi18nMappingConstants.APPLICATION_DISABLED_APPLICATION_DISABLED_DESCRIPTION,
+                    ErrorToi18nMappingConstants.APPLICATION_DISABLED_APPLICATION_DISABLED_DESCRIPTION_I18N_KEY);
             ERROR_TO_I18N_MAP.put(Constants.ErrorToi18nMappingConstants.AUTHENTICATION_FLOW_TIMEOUT_AUTHENTICATION_FLOW_TIMEOUT_DESCRIPTION,
                     Constants.ErrorToi18nMappingConstants.AUTHENTICATION_FLOW_TIMEOUT_AUTHENTICATION_FLOW_TIMEOUT_DESCRIPTION_I18N_KEY);
             ERROR_TO_I18N_MAP.put(Constants.ErrorToi18nMappingConstants.INVALID_RESPONSE_TYPE_FOR_QUERY_JWT_DESCRIPTION,
                     Constants.ErrorToi18nMappingConstants.INVALID_RESPONSE_TYPE_FOR_QUERY_JWT_DESCRIPTION_I18N_KEY);
+            ERROR_TO_I18N_MAP.put(ErrorToi18nMappingConstants.INVALID_RESPONSE_TYPE_FOR_HYBRID_FLOW_DESCRIPTION,
+                    Constants.ErrorToi18nMappingConstants.INVALID_RESPONSE_TYPE_FOR_HYBRID_FLOW_DESCRIPTION_I18N_KEY);
         }
 
         private ErrorToi18nMappingConstants() {

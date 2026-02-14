@@ -29,6 +29,7 @@ import org.wso2.carbon.identity.application.authentication.framework.config.mode
 import org.wso2.carbon.identity.application.authentication.framework.config.model.SequenceConfig;
 import org.wso2.carbon.identity.application.authentication.framework.exception.FrameworkException;
 import org.wso2.carbon.identity.application.authentication.framework.internal.FrameworkServiceDataHolder;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
 import org.wso2.carbon.identity.application.common.model.AuthenticationStep;
 import org.wso2.carbon.identity.application.common.model.IdentityProvider;
@@ -194,7 +195,8 @@ public class ConfigurationFacade {
     public String getAuthenticationEndpointURL() {
 
         return buildUrl(AUTHENTICATION_ENDPOINT,
-                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointURL);
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointURL,
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointURLV2);
     }
 
     public String getAuthenticationEndpointAbsoluteURL() {
@@ -206,19 +208,22 @@ public class ConfigurationFacade {
     public String getAuthenticationEndpointRetryURL() {
 
         return buildUrl(AUTHENTICATION_ENDPOINT_RETRY,
-                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointRetryURL);
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointRetryURL,
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointRetryURLV2);
     }
 
     public String getAuthenticationEndpointErrorURL() {
 
         return buildUrl(AUTHENTICATION_ENDPOINT_ERROR,
-                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointErrorURL);
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointErrorURL,
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointErrorURLV2);
     }
 
     public String getAuthenticationEndpointWaitURL() {
 
         return buildUrl(AUTHENTICATION_ENDPOINT_WAIT,
-                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointWaitURL);
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointWaitURL,
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointWaitURLV2);
     }
 
     public String getAccountRecoveryEndpointAbsolutePath() {
@@ -234,13 +239,15 @@ public class ConfigurationFacade {
     public String getIdentifierFirstConfirmationURL() {
 
         return buildUrl(IDENTIFIER_FIRST_CONFIRMATION,
-                FileBasedConfigurationBuilder.getInstance()::getIdentifierFirstConfirmationURL);
+                FileBasedConfigurationBuilder.getInstance()::getIdentifierFirstConfirmationURL,
+                FileBasedConfigurationBuilder.getInstance()::getIdentifierFirstConfirmationURLV2);
     }
 
     public String getAuthenticationEndpointPromptURL() {
 
         return buildUrl(AUTHENTICATION_ENDPOINT_DYNAMIC_PROMPT,
-                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointPromptURL);
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointPromptURL,
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointPromptURLV2);
     }
 
     /**
@@ -251,7 +258,8 @@ public class ConfigurationFacade {
     public String getAuthenticationEndpointMissingClaimsURL() {
 
         return buildUrl(AUTHENTICATION_ENDPOINT_MISSING_CLAIMS_PROMPT,
-                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointMissingClaimsURL);
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointMissingClaimsURL,
+                FileBasedConfigurationBuilder.getInstance()::getAuthenticationEndpointMissingClaimsURLV2);
     }
 
     /**
@@ -303,6 +311,16 @@ public class ConfigurationFacade {
         return FileBasedConfigurationBuilder.getInstance().getMaxLoginAttemptCount();
     }
 
+    /**
+     * Return whether the consent page redirect params are allowed.
+     *
+     * @return True if the query params are allowed, false otherwise.
+     */
+    public boolean isConsentPageRedirectParamsAllowed() {
+
+        return FileBasedConfigurationBuilder.getInstance().isConsentPageRedirectParamsAllowed();
+    }
+
     private String readAccountRecoveryEndpointPath() {
 
         return preprocessEndpointPath(IdentityUtil.getProperty("RecoveryEndpoint.Path"));
@@ -323,13 +341,30 @@ public class ConfigurationFacade {
         }
     }
 
+    @Deprecated
     private String buildUrl(String defaultContext, Supplier<String> getValueFromFileBasedConfig) {
 
-        if (IdentityTenantUtil.isTenantQualifiedUrlsEnabled()) {
+        return buildUrl(defaultContext, getValueFromFileBasedConfig, null);
+    }
+
+    private String buildUrl(String defaultContext, Supplier<String> getValueFromFileBasedConfig,
+                            Supplier<String> getV2VaueFromFileBasedConfig) {
+
+        String applicationName = PrivilegedCarbonContext.getThreadLocalCarbonContext().getApplicationName();
+        if (IdentityTenantUtil.shouldUseTenantQualifiedURLs()) {
             try {
+                if (getV2VaueFromFileBasedConfig != null &&
+                        StringUtils.isNotBlank(getV2VaueFromFileBasedConfig.get())) {
+                    return getV2VaueFromFileBasedConfig.get();
+                }
                 String organizationId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getOrganizationId();
-                return ServiceURLBuilder.create().addPath(defaultContext).setOrganization(organizationId).build()
-                        .getAbsolutePublicURL();
+                ServiceURLBuilder serviceURLBuilder =
+                        ServiceURLBuilder.create().addPath(defaultContext).setOrganization(organizationId);
+                if (FrameworkConstants.Application.MY_ACCOUNT_APP.equals(applicationName) ||
+                        FrameworkConstants.Application.CONSOLE_APP.equals(applicationName)) {
+                    serviceURLBuilder.setSkipDomainBranding(true);
+                }
+                return serviceURLBuilder.build().getAbsolutePublicURL();
             } catch (URLBuilderException e) {
                 throw new IdentityRuntimeException(
                         "Error while building tenant qualified url for context: " + defaultContext, e);

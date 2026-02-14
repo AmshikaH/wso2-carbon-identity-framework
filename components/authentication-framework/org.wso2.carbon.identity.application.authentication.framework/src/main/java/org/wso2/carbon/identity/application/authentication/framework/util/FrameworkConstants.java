@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2013-2026, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -24,6 +24,7 @@ package org.wso2.carbon.identity.application.authentication.framework.util;
 public abstract class FrameworkConstants {
 
     public static final String SESSION_DATA_KEY = "sessionDataKey";
+    public static final String SECRET_TYPE = "ADAPTIVE_AUTH_CALL_CHOREO";
     public static final String QUERY_PARAMS = "commonAuthQueryParams";
     public static final String SUBJECT = "subject";
     public static final String DEFAULT_SEQUENCE = "default";
@@ -33,18 +34,21 @@ public abstract class FrameworkConstants {
     public static final String COMMONAUTH_COOKIE = "commonAuthId";
     public static final String ALLOW_SESSION_CREATION = "allowSessionCreation";
     public static final String CONTEXT_PROP_INVALID_EMAIL_USERNAME = "InvalidEmailUsername";
+    public static final String CUSTOM_AUTHENTICATOR_PREFIX = "custom-";
     // Cookie used for post authenticaion sequence tracking
     public static final String PASTR_COOKIE = "pastr";
     public static final String CLAIM_URI_WSO2_EXT_IDP = "http://wso2.org/claims/externalIDP";
     public static final String LOCAL_ROLE_CLAIM_URI = "http://wso2.org/claims/role";
     public static final String ACCOUNT_LOCKED_CLAIM_URI = "http://wso2.org/claims/identity/accountLocked";
     public static final String ACCOUNT_DISABLED_CLAIM_URI = "http://wso2.org/claims/identity/accountDisabled";
+    public static final String ACCOUNT_STATE_CLAIM_URI = "http://wso2.org/claims/identity/accountState";
     public static final String ACCOUNT_UNLOCK_TIME_CLAIM = "http://wso2.org/claims/identity/unlockTime";
     public static final String USERNAME_CLAIM = "http://wso2.org/claims/username";
     public static final String USER_ID_CLAIM = "http://wso2.org/claims/userid";
     public static final String EMAIL_ADDRESS_CLAIM = "http://wso2.org/claims/emailaddress";
     public static final String APP_ROLES_CLAIM = "http://wso2.org/claims/applicationRoles";
     public static final String ROLES_CLAIM = "http://wso2.org/claims/roles";
+    public static final String VERIFIED_MOBILE_NUMBERS_CLAIM = "http://wso2.org/claims/verifiedMobileNumbers";
 
     public static final String GROUPS_CLAIM = "http://wso2.org/claims/groups";
     public static final String PROVISIONED_SOURCE_ID_CLAIM = "http://wso2.org/claims/identity/userSourceId";
@@ -71,6 +75,7 @@ public abstract class FrameworkConstants {
     public static final String USERNAME = "username";
     public static final String PASSWORD = "password";
     public static final String SIGN_UP_ENDPOINT = "/accountrecoveryendpoint/signup.do";
+    public static final String VERIFY_ENDPOINT = "/authenticationendpoint/verify.do";
     public static final String REGISTRATION_ENDPOINT = "/accountrecoveryendpoint/register.do";
     public static final String ERROR_CODE = "errorCode";
     public static final String ERROR_MESSAGE = "errorMessage";
@@ -83,6 +88,11 @@ public abstract class FrameworkConstants {
     public static final String IS_MULTI_OPS_RESPONSE = "isMultiOptionsResponse";
     public static final String IS_AUTH_FLOW_CONCLUDED = "isAuthFlowConcluded";
     public static final String IS_API_BASED_AUTH_FLOW = "isAPIBasedAuthFlow";
+    public static final String ADD_USER_STORE_DOMAIN_TO_GROUPS_CLAIM = "AddUserStoreDomainToGroupClaims";
+    public static final String IS_OTP_VERIFICATION_TRIGGERED = "isOtpVerificationTriggered";
+    public static final String OTP_VERIFICATION_PENDING_CLAIM = "otpVerificationPendingClaim";
+    public static final String CLAIM_FOR_PENDING_OTP_VERIFICATION = "claimForPendingOtpVerification";
+    public static final String IS_PROGRESSIVE_PROFILE_VERIFICATION = "isProgressiveProfileVerification";
 
     // This is to support sign-up form to be displayed in the provisioning flow, as when trying to displaying the
     // sign-up form, we validate whether self-sign up is enabled.
@@ -137,11 +147,15 @@ public abstract class FrameworkConstants {
     public static final String JIT_PROVISIONING_FLOW = "JITProvisioningFlow";
     public static final String ALLOW_LOGIN_TO_IDP = "JITProvisioning.AllowLoginToIDP";
     public static final String SECRET_KEY_CLAIM_URL = "http://wso2.org/claims/identity/secretkey";
+    public static final String USED_TIME_WINDOWS = "http://wso2.org/claims/identity/usedTOTPTimeWindows";
     public static final String ENABLE_ENCRYPTION = "EnableEncryption";
     public static final String TOTP_KEY = "CryptoService.TotpSecret";
     public static final String IDP_RESOURCE_ID = "IDPResourceID";
     public static final String ENABLE_JIT_PROVISION_ENHANCE_FEATURE = "JITProvisioning.EnableEnhancedFeature";
     public static final String ERROR_CODE_INVALID_ATTRIBUTE_UPDATE = "SUO-10000";
+    public static final String ENABLE_CONFIGURED_IDP_SUB_FOR_FEDERATED_USER_ASSOCIATION
+            = "JITProvisioning.EnableConfiguredIdpSubForFederatedUserAssociation";
+    public static final String ALLOW_NON_STANDARD_CLAIM_URI = "JITProvisioning.AllowNonStandardClaimURI";
 
     // Error details sent from authenticators
     public static final String AUTH_ERROR_CODE = "AuthErrorCode";
@@ -152,6 +166,7 @@ public abstract class FrameworkConstants {
     public static final String ORGANIZATION_USER_PROPERTIES = "ORGANIZATION_USER_PROPERTIES";
     public static final String ORGANIZATION_AUTHENTICATOR = "OrganizationAuthenticator";
     public static final String ORGANIZATION_LOGIN_HOME_REALM_IDENTIFIER = "OrganizationSSO";
+    public static final String ORGANIZATION_LOGIN_IDP_NAME = "SSO";
     public static final String ORG_ID_PARAMETER = "orgId";
     public static final String USER_ORGANIZATION_CLAIM = "user_organization";
     public static final String SESSION_AUTH_HISTORY = "SESSION_AUTH_HISTORY";
@@ -228,6 +243,8 @@ public abstract class FrameworkConstants {
     public static final String THREAD_LOCAL_SCRIPT_ENGINE_CONFIG = "AdaptiveAuth.LimitScriptEngineCreation";
     public static final String OPENJDK_NASHORN = "openjdkNashorn";
     public static final String NASHORN = "nashorn";
+    public static final String GRAAL_JS = "graaljs";
+    public static final String POLYGLOT_CLASS = "org.graalvm.polyglot";
 
     // Attribute sync related constants.
     public static final String ATTRIBUTE_SYNC_METHOD = "attributeSyncMethod";
@@ -235,6 +252,7 @@ public abstract class FrameworkConstants {
     public static final String SYNC_NONE = "NONE";
     public static final String PRESERVE_LOCAL = "PRESERVE_LOCAL";
     public static final String RESTART_LOGIN_FLOW = "restartLoginFlow";
+    public static final String REMOVE_COMMONAUTH_COOKIE = "removeCommonAuthCookie";
     public static final String INITIAL_CONTEXT = "initialContext";
     public static final String RESTART_LOGIN_FLOW_QUERY_PARAMS =
             "&authFailure=true&authFailureMsg=login.reinitiate.message";
@@ -249,11 +267,29 @@ public abstract class FrameworkConstants {
     public static final String ERROR_DESCRIPTION_AUTH_CONTEXT_NULL = "authentication.context.null.description";
     public static final String ERROR_STATUS_AUTH_FLOW_TIMEOUT = "authentication.flow.timeout";
     public static final String ERROR_DESCRIPTION_AUTH_FLOW_TIMEOUT = "authentication.flow.timeout.description";
+    public static final String ERROR_STATUS_APP_DISABLED = "authentication.flow.app.disabled";
+    public static final String ERROR_STATUS_INVALID_AUTHENTICATOR = "authentication.invalid.authenticator";
+    public static final String ERROR_DESCRIPTION_APP_DISABLED = "authentication.flow.app.disabled.description";
+    public static final String ERROR_STATUS_AUTHENTICATOR_NOT_SUPPORTED = "authentication.api.based.unsupported" +
+            ".authenticator";
     public static final String IS_SENT_TO_RETRY = "isSentToRetry";
     public static final String CONTEXT_IDENTIFIER = "contextIdentifier";
     public static final String REQ_ATTR_RETRY_STATUS = "retryStatus";
     public static final String IDP_MAPPED_USER_ROLES = "identityProviderMappedUserRoles";
     public static final String ALLOW_ASSOCIATING_TO_EXISTING_USER = "JITProvisioning.AllowAssociatingToExistingUser";
+
+    // The constant to used as the attribute key or the property key of the federated tokens.
+    public static final String FEDERATED_TOKENS = "federated_tokens";
+    public static final String IS_EXTERNAL_CALL = "IS_EXTERNAL_CALL";
+
+    public static final String FILER_BY_SESSION_ID_FOR_USER = "FilterByUniqueSessionIdForUser";
+
+    public static final String AMR = "amr";
+    public static final String USER_ASSERTION = "userAssertion";
+
+    // Authentication entity constants.
+    public static final String AUTH_ENTITY = "auth_entity";
+    public static final String AUTH_ENTITY_AGENT = "agent";
 
     private FrameworkConstants() {
 
@@ -313,6 +349,7 @@ public abstract class FrameworkConstants {
         public static final String QNAME_AUTHENTICATION_ENDPOINT_PROMPT_URL = "AuthenticationEndpointPromptURL";
         public static final String QNAME_AUTHENTICATION_ENDPOINT_MISSING_CLAIMS_URL =
                 "AuthenticationEndpointMissingClaimsURL";
+        public static final String V2 = "V2";
         public static final String QNAME_PROXY_MODE = "ProxyMode";
         public static final String QNAME_MAX_LOGIN_ATTEMPT_COUNT = "MaxLoginAttemptCount";
         public static final String QNAME_EXTENSIONS = "Extensions";
@@ -393,6 +430,16 @@ public abstract class FrameworkConstants {
         public static final String AUTHENTICATION_CONTEXT_EXPIRY_VALIDATION =
                 "EnableAuthenticationContextExpiryValidation";
 
+        /**
+         * JIT Provisioning configurations.
+         */
+        public static final String SHOW_FAILURE_REASON = "JITProvisioning.ShowFailureReason";
+
+        /**
+         * Configuration to mark the step as completed on interrupt.
+         */
+        public static final String MARK_STEP_COMPLETED_ON_INTERRUPT = "MarkStepCompletedOnInterrupt";
+
         private Config() {
         }
 
@@ -432,6 +479,7 @@ public abstract class FrameworkConstants {
         public static final String CORRELATION_ID = "crId";
         public static final String IS_IDF_INITIATED_FROM_AUTHENTICATOR = "isIdfInitiatedFromAuthenticator";
         public static final String SESSION_ID = "sessionId";
+        public static final String REQUESTED_SUBJECT = "requested_subject";
 
         private RequestParams() {
         }
@@ -512,7 +560,9 @@ public abstract class FrameworkConstants {
         public static final String AUTHENTICATION_ENDPOINT_DYNAMIC_PROMPT = "/authenticationendpoint/dynamic_prompt.do";
         public static final String AUTHENTICATION_ENDPOINT_MISSING_CLAIMS_PROMPT = "/authenticationendpoint/claims.do";
         public static final String ACCOUNT_RECOVERY_ENDPOINT_PATH = "/accountrecoveryendpoint";
-
+        public static final String ACCOUNT_RECOVERY_CONFIRM_RECOVERY_ENDPOINT =
+                "accountrecoveryendpoint/confirmrecovery.do";
+        public static final String ORCHESTRATED_INVITED_USER_REGISTRATION_ENDPOINT = "/accounts/register";
     }
 
     /**
@@ -579,8 +629,10 @@ public abstract class FrameworkConstants {
         public static final String JS_FEDERATED_IDP = "federated";
         public static final String JS_COMMON_OPTIONS = "common";
         public static final String JS_OPTIONS_USERNAME = "username";
+        public static final String JS_IDENTIFIER_FIRST_USER_INPUT = "identifierFirstUserInput";
 
         public static final String PROP_CURRENT_NODE = "Adaptive.Auth.Current.Graph.Node";
+        public static final String PROP_USERNAME_UPDATED_EXTERNALLY = "usernameUpdatedExternally";
 
         public static final String JS_FUNC_ON_LOGIN_REQUEST = "onLoginRequest";
         public static final String JS_FUNC_EXECUTE_STEP = "executeStep";
@@ -593,6 +645,7 @@ public abstract class FrameworkConstants {
         public static final String JS_FUNC_SEND_ERROR = "sendError";
         public static final String JS_RETRY_STEP = "retry";
         public static final String JS_FUNC_LOAD_FUNC_LIB = "loadLocalLibrary";
+        public static final String JS_FUNC_GET_SECRET_BY_NAME = "getSecretByName";
         public static final String JS_AUTH_FAILURE = "fail";
         public static final String JS_ENDPOINT_PARAMS = "endpointParams";
 
@@ -605,6 +658,11 @@ public abstract class FrameworkConstants {
         public static final String SUBJECT_IDENTIFIER_PARAM = "markAsSubjectIdentifierStep";
         public static final String SUBJECT_ATTRIBUTE_PARAM = "markAsSubjectAttributeStep";
         public static final String SKIP_PROMPT = "skipPrompt";
+
+        public static final String POLYGLOT_SOURCE = "src.js";
+        public static final String POLYGLOT_LANGUAGE = "js";
+        public static final String GRAALJS = "graaljs";
+        public static final String NASHORN = "nashorn";
     }
 
     /**
@@ -653,17 +711,25 @@ public abstract class FrameworkConstants {
                 "AdaptiveAuth.ExecutionSupervisor.Enable";
         public static final String CONF_EXECUTION_SUPERVISOR_THREAD_COUNT =
                 "AdaptiveAuth.ExecutionSupervisor.ThreadCount";
+        public static final String CONF_EXECUTION_SUPERVISOR_TIMEOUT_ENABLE =
+                "AdaptiveAuth.ExecutionSupervisor.TimeoutEnable";
         public static final String CONF_EXECUTION_SUPERVISOR_TIMEOUT =
                 "AdaptiveAuth.ExecutionSupervisor.Timeout";
         public static final String CONF_EXECUTION_SUPERVISOR_MEMORY_LIMIT =
                 "AdaptiveAuth.ExecutionSupervisor.MemoryLimit";
         public static final int DEFAULT_EXECUTION_SUPERVISOR_THREAD_COUNT = 1;
         public static final long DEFAULT_EXECUTION_SUPERVISOR_TIMEOUT = 500L;
+        public static final boolean DEFAULT_EXECUTION_SUPERVISOR_TIMEOUT_ENABLE = true;
         public static final long DEFAULT_EXECUTION_SUPERVISOR_MEMORY_LIMIT = -1;
         public static final String PROP_EXECUTION_SUPERVISOR_RESULT
                 = "AdaptiveAuthExecutionSupervisorResult";
         public static final String AUTHENTICATOR_NAME_IN_AUTH_CONFIG
                 = "AdaptiveAuth.AuthenticatorNameInAuthConfig.Enable";
+        public static final String ALLOW_AUTHENTICATED_SUB_UPDATE =
+                "AdaptiveAuth.AllowUpdatingAuthenticatedSubject";
+        public static final String GRAALJS_SCRIPT_STATEMENTS_LIMIT
+                = "AdaptiveAuth.GraalJS.ScriptStatementsLimit";
+        public static final int DEFAULT_GRAALJS_SCRIPT_STATEMENTS_LIMIT = 0;
     }
 
     /**
@@ -684,9 +750,11 @@ public abstract class FrameworkConstants {
         public static final String AUTHENTICATION_DURATION = "authenticationDuration";
         public static final String DATA_MAP = "dataMap";
         public static final String AUTHENTICATION_ERROR_CODE = "authenticationErrorCode";
+        public static final String AUTHENTICATION_ERROR_MESSAGE = "authenticationErrorMessage";
         public static final String CURRENT_AUTHENTICATOR_START_TIME = "currentAuthenticatorStartTime";
         public static final String CURRENT_AUTHENTICATOR_DURATION = "currentAuthenticatorDuration";
         public static final String CURRENT_AUTHENTICATOR_ERROR_CODE = "currentAuthenticatorErrorCode";
+        public static final String CURRENT_AUTHENTICATOR_ERROR_MESSAGE = "currentAuthenticatorErrorMessage";
         public static final String CUSTOM_PARAM_PREFIX = "customParam";
         public static final int CUSTOM_PARAM_LENGTH = 5;
         public static final String CUSTOM_PARAM_1 = CUSTOM_PARAM_PREFIX + "1";
@@ -769,12 +837,28 @@ public abstract class FrameworkConstants {
     }
 
     /**
+     * Constants of the states of the account.
+     */
+    public static class AccountStatus {
+
+        public static final String PENDING_EV = "PENDING_EV";
+        public static final String PENDING_AP = "PENDING_AP";
+        public static final String PENDING_SR = "PENDING_SR";
+        public static final String PENDING_LR = "PENDING_LR";
+
+        private AccountStatus() {
+            // Prevent instantiation
+        }
+    }
+
+    /**
      * Enum for authenticator param type.
      */
     public enum AuthenticatorParamType {
 
         STRING,
         INTEGER,
+        MULTI_VALUED
     }
 
     /**
@@ -799,5 +883,52 @@ public abstract class FrameworkConstants {
 
         INFO,
         ERROR
+    }
+
+    /**
+     * Constants related to Organization Discovery Input parameters.
+     */
+    public static class OrgDiscoveryInputParameters {
+
+        public static final String ORG_ID = "orgId";
+        public static final String ORG_HANDLE = "orgHandle";
+        public static final String ORG_NAME = "org";
+        public static final String LOGIN_HINT = "login_hint";
+        public static final String ORG_DISCOVERY_TYPE = "orgDiscoveryType";
+
+        private OrgDiscoveryInputParameters() {
+
+        }
+    }
+
+    /**
+     * Enum for Organization Discovery Failure Details.
+     */
+    public enum OrgDiscoveryFailureDetails {
+
+        VALID_DISCOVERY_PARAMETERS_NOT_FOUND("60001", "Valid organization discovery parameters are not found."),
+        ORGANIZATION_NOT_FOUND("60002", "Organization is not found for given discovery parameters."),
+        APPLICATION_NOT_SHARED("60003", "Application is not shared with the organization."),
+        ORGANIZATION_DISCOVERY_TYPE_NOT_ENABLED_OR_SUPPORTED("60004",
+                "Organization discovery type is not enabled or supported for the organization.");
+
+        private final String code;
+        private final String message;
+
+        OrgDiscoveryFailureDetails(String code, String message) {
+
+            this.code = code;
+            this.message = message;
+        }
+
+        public String getCode() {
+
+            return this.code;
+        }
+
+        public String getMessage() {
+
+            return this.message;
+        }
     }
 }

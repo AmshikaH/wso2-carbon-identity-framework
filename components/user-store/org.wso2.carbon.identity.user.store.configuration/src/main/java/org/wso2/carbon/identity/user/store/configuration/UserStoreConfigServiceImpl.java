@@ -18,6 +18,7 @@ package org.wso2.carbon.identity.user.store.configuration;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.osgi.annotation.bundle.Capability;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.core.multitenancy.utils.TenantAxisUtils;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
@@ -56,6 +57,7 @@ import javax.xml.bind.Marshaller;
 import static org.wso2.carbon.identity.user.store.configuration.utils.SecondaryUserStoreConfigurationUtil.buildIdentityUserStoreClientException;
 import static org.wso2.carbon.identity.user.store.configuration.utils.SecondaryUserStoreConfigurationUtil.triggerListenersOnUserStorePostGet;
 import static org.wso2.carbon.identity.user.store.configuration.utils.SecondaryUserStoreConfigurationUtil.triggerListenersOnUserStorePreAdd;
+import static org.wso2.carbon.identity.user.store.configuration.utils.SecondaryUserStoreConfigurationUtil.triggerListenersOnUserStorePreStateChange;
 import static org.wso2.carbon.identity.user.store.configuration.utils.SecondaryUserStoreConfigurationUtil.triggerListenersOnUserStorePreUpdate;
 import static org.wso2.carbon.identity.user.store.configuration.utils.SecondaryUserStoreConfigurationUtil.triggerListenersOnUserStoresPostGet;
 import static org.wso2.carbon.identity.user.store.configuration.utils.UserStoreConfigurationConstant.H2_INIT_REGEX;
@@ -63,6 +65,13 @@ import static org.wso2.carbon.identity.user.store.configuration.utils.UserStoreC
 /**
  * Implementation class for UserStoreConfigService.
  */
+@Capability(
+        namespace = "osgi.service",
+        attribute = {
+                "objectClass=org.wso2.carbon.identity.user.store.configuration.UserStoreConfigService",
+                "service.scope=singleton"
+        }
+)
 public class UserStoreConfigServiceImpl implements UserStoreConfigService {
 
     private static final Log LOG = LogFactory.getLog(UserStoreConfigServiceImpl.class);
@@ -115,6 +124,9 @@ public class UserStoreConfigServiceImpl implements UserStoreConfigService {
         loadTenant();
         try {
             triggerListenersOnUserStorePreUpdate(userStoreDTO, isStateChange);
+            if (isUserStoreDisabled(userStoreDTO.getProperties())) {
+                triggerListenersOnUserStorePreStateChange(userStoreDTO.getDomainId(), true);
+            }
             if (SecondaryUserStoreConfigurationUtil.isUserStoreRepositorySeparationEnabled() &&
                     StringUtils.isNotEmpty(userStoreDTO.getRepositoryClass())) {
 
@@ -511,5 +523,15 @@ public class UserStoreConfigServiceImpl implements UserStoreConfigService {
                 }
             }
         }
+    }
+
+    private boolean isUserStoreDisabled(PropertyDTO[] propertyDTOS) {
+
+        for (PropertyDTO propertyDTO: propertyDTOS) {
+            if (propertyDTO.getName().equalsIgnoreCase("Disabled")) {
+                return Boolean.parseBoolean(propertyDTO.getValue());
+            }
+        }
+        return false;
     }
 }

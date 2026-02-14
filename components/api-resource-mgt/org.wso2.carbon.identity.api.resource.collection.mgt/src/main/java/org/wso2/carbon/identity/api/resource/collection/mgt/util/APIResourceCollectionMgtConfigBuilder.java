@@ -37,9 +37,10 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
@@ -119,12 +120,13 @@ public class APIResourceCollectionMgtConfigBuilder {
             if (apiResourceCollectionObj == null) {
                 continue;
             }
-            // Fetch scopes.
+            String collectionVersion = apiResourceCollection
+                    .getAttributeValue(new QName(APIResourceCollectionConfigBuilderConstants.VERSION));
             OMElement scopesElement = apiResourceCollection.getFirstChildWithName(
                     new QName(APIResourceCollectionConfigBuilderConstants.SCOPES_ELEMENT));
             if (scopesElement != null) {
-                List<String> readScopeList = new ArrayList<>();
-                List<String> writeScopeList = new ArrayList<>();
+                Set<String> readScopeSet = new HashSet<>();
+                Set<String> writeScopeSet = new HashSet<>();
                 Iterator<?> actionElements = scopesElement.getChildElements();
                 while (actionElements.hasNext()) {
                     OMElement actionElement = (OMElement) actionElements.next();
@@ -137,22 +139,52 @@ public class APIResourceCollectionMgtConfigBuilder {
                         OMElement scope = scopes.next();
                         String scopeName = scope.getAttributeValue(
                                 new QName(APIResourceCollectionConfigBuilderConstants.NAME));
-                        // Read, Feature scopes are considered as read scopes.
-                        if (APIResourceCollectionConfigBuilderConstants.READ.equals(actionElement.getLocalName()) ||
-                                APIResourceCollectionConfigBuilderConstants.FEATURE.equals(
-                                        actionElement.getLocalName())) {
-                            if (!readScopeList.contains(scopeName)) {
-                                readScopeList.add(scopeName);
+                        // Read and old Feature scope are considered as read scopes.
+                        boolean isReadAction = APIResourceCollectionConfigBuilderConstants.READ
+                                .equals(actionElement.getLocalName());
+                        boolean isFeatureAction = APIResourceCollectionConfigBuilderConstants.FEATURE.
+                                equals(actionElement.getLocalName());
+                        if (APIResourceCollectionConfigBuilderConstants.COLLECTION_VERSION_V0
+                                .equals(collectionVersion)) {
+                            if (isReadAction || isFeatureAction) {
+                                readScopeSet.add(scopeName);
+                            } else {
+                                writeScopeSet.add(scopeName);
                             }
                         } else {
-                            if (!writeScopeList.contains(scopeName)) {
-                                writeScopeList.add(scopeName);
+                            // Process new scopes with feature scopes.
+                            if (isReadAction) {
+                                readScopeSet.add(scopeName);
+                            } else if (isFeatureAction) {
+                                if (isViewFeatureScope(scopeName)) {
+                                    apiResourceCollectionObj.setViewFeatureScope(scopeName);
+                                    readScopeSet.add(scopeName);
+                                } else if (isEditFeatureScope(scopeName)) {
+                                    apiResourceCollectionObj.setEditFeatureScope(scopeName);
+                                    writeScopeSet.add(scopeName);
+                                } else {
+                                    readScopeSet.add(scopeName);
+                                }
+                            } else {
+                                writeScopeSet.add(scopeName);
                             }
                         }
                     }
                 }
-                apiResourceCollectionObj.setReadScopes(readScopeList);
-                apiResourceCollectionObj.setWriteScopes(writeScopeList);
+                if (APIResourceCollectionConfigBuilderConstants.COLLECTION_VERSION_V0
+                        .equals(collectionVersion)) {
+                    apiResourceCollectionObj.setLegacyReadScopes(new ArrayList<>(readScopeSet));
+                    apiResourceCollectionObj.setLegacyWriteScopes(new ArrayList<>(writeScopeSet));
+                    if (apiResourceCollectionObj.getReadScopes() == null) {
+                        apiResourceCollectionObj.setReadScopes(new ArrayList<>(readScopeSet));
+                    }
+                    if (apiResourceCollectionObj.getWriteScopes() == null) {
+                        apiResourceCollectionObj.setWriteScopes(new ArrayList<>(writeScopeSet));
+                    }
+                } else {
+                    apiResourceCollectionObj.setReadScopes(new ArrayList<>(readScopeSet));
+                    apiResourceCollectionObj.setWriteScopes(new ArrayList<>(writeScopeSet));
+                }
             }
             apiResourceCollectionMgtConfigurations.put(apiResourceCollectionObj.getId(), apiResourceCollectionObj);
         }
@@ -165,7 +197,7 @@ public class APIResourceCollectionMgtConfigBuilder {
         String encodedName = Base64.getEncoder().encodeToString(name.getBytes(StandardCharsets.UTF_8)).replace(
                 APIResourceCollectionManagementConstants.EQUAL_SIGN, StringUtils.EMPTY);
         if (apiResourceCollectionMgtConfigurations.containsKey(encodedName)) {
-            return null;
+            return apiResourceCollectionMgtConfigurations.get(encodedName);
         }
 
         return new APIResourceCollection.APIResourceCollectionBuilder()
@@ -175,5 +207,19 @@ public class APIResourceCollectionMgtConfigBuilder {
                         element.getAttributeValue(new QName(APIResourceCollectionConfigBuilderConstants.DISPLAY_NAME)))
                 .type(element.getAttributeValue(new QName(APIResourceCollectionConfigBuilderConstants.TYPE)))
                 .build();
+    }
+
+    private boolean isViewFeatureScope(String scope) {
+
+        return StringUtils.isNotBlank(scope) &&
+                scope.startsWith(APIResourceCollectionConfigBuilderConstants.CONSOLE_SCOPE_PREFIX) &&
+                scope.endsWith(APIResourceCollectionConfigBuilderConstants.VIEW_FEATURE_SCOPE_SUFFIX);
+    }
+
+    private boolean isEditFeatureScope(String scope) {
+
+        return StringUtils.isNotBlank(scope) &&
+                scope.startsWith(APIResourceCollectionConfigBuilderConstants.CONSOLE_SCOPE_PREFIX) &&
+                scope.endsWith(APIResourceCollectionConfigBuilderConstants.EDIT_FEATURE_SCOPE_SUFFIX);
     }
 }

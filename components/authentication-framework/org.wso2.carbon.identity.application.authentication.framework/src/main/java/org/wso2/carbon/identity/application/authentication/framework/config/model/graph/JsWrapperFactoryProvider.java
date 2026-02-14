@@ -18,6 +18,7 @@
 
 package org.wso2.carbon.identity.application.authentication.framework.config.model.graph;
 
+import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.graaljs.JsGraalWrapperFactory;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.openjdk.nashorn.JsOpenJdkNashornGraphBuilderFactory;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.openjdk.nashorn.JsOpenJdkNashornWrapperFactory;
 import org.wso2.carbon.identity.application.authentication.framework.internal.FrameworkServiceDataHolder;
@@ -33,11 +34,12 @@ public class JsWrapperFactoryProvider {
 
     private JsWrapperFactoryProvider() {
 
-        if (FrameworkServiceDataHolder.getInstance().
-                getJsGraphBuilderFactory() instanceof JsOpenJdkNashornGraphBuilderFactory) {
+        if (FrameworkServiceDataHolder.getInstance()
+                .getJsGenericGraphBuilderFactory() instanceof JsOpenJdkNashornGraphBuilderFactory) {
             jsWrapperBaseFactory = new JsOpenJdkNashornWrapperFactory();
         } else {
-            jsWrapperBaseFactory = new JsWrapperFactory();
+            // Default to GraalJS based implementation, since it is packed by default in the product.
+            jsWrapperBaseFactory = new JsGraalWrapperFactory();
         }
     }
 

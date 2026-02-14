@@ -18,9 +18,9 @@
 
 package org.wso2.carbon.identity.input.validation.mgt.test;
 
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.testng.PowerMockTestCase;
+import org.mockito.MockedStatic;
 import org.testng.Assert;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 import org.wso2.carbon.identity.configuration.mgt.core.ConfigurationManager;
@@ -46,27 +46,36 @@ import java.util.Map;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.wso2.carbon.identity.input.validation.mgt.utils.Constants.INPUT_VAL_CONFIG_RESOURCE_NAME_PREFIX;
 import static org.wso2.carbon.identity.input.validation.mgt.utils.Constants.INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME;
 
 /**
  * Testing the InputValidationManagementService class
  */
-@PrepareForTest({ InputValidationDataHolder.class })
-public class InputValidationManagementServiceTest extends PowerMockTestCase {
+public class InputValidationManagementServiceTest {
 
     private InputValidationManagementService service;
     private String tenantName = "testTenant";
     private String fieldPassword = "password";
     private String fieldUsername = "username";
+    private MockedStatic<InputValidationDataHolder> inputValidationDataHolder;
 
     @BeforeMethod
     public void setup() {
 
         service = new InputValidationManagementServiceImpl();
-        mockStatic(InputValidationDataHolder.class);
+        inputValidationDataHolder = mockStatic(InputValidationDataHolder.class);
+    }
+
+    @AfterMethod
+    public void tearDown() {
+
+        inputValidationDataHolder.close();
     }
 
     @Test
@@ -116,6 +125,54 @@ public class InputValidationManagementServiceTest extends PowerMockTestCase {
         } catch (ConfigurationManagementException | InputValidationMgtException e) {
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testRevertInputValidationConfiguration() throws Exception {
+
+        ConfigurationManager configurationManager = mock(ConfigurationManager.class);
+        when(InputValidationDataHolder.getConfigurationManager()).thenReturn(configurationManager);
+
+        // Case 1: Resource exists and should be deleted.
+        String existingField = "existingField";
+        List<String> fieldsToRevert = new ArrayList<>();
+        fieldsToRevert.add(existingField);
+        String resourceName = INPUT_VAL_CONFIG_RESOURCE_NAME_PREFIX + existingField;
+        Resource mockResource = new Resource();
+        mockResource.setResourceName(resourceName);
+
+        when(configurationManager.getResource(INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME, resourceName))
+                .thenReturn(mockResource);
+        service.revertInputValidationConfiguration(fieldsToRevert, tenantName);
+        verify(configurationManager, times(1)).deleteResource(INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME, resourceName);
+
+        // Case 2: Resource does not exist, delete should not be called.
+        String nonExistingField = "nonExistingField";
+        fieldsToRevert.clear();
+        fieldsToRevert.add(nonExistingField);
+        String nonExistingResourceName = INPUT_VAL_CONFIG_RESOURCE_NAME_PREFIX + nonExistingField;
+        when(configurationManager.getResource(INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME, nonExistingResourceName))
+                .thenReturn(null);
+        service.revertInputValidationConfiguration(fieldsToRevert, tenantName);
+        // Verify deleteResource was not called again for this case (still 1 from previous case).
+        verify(configurationManager, times(1)).deleteResource(anyString(), anyString());
+
+        // Case 3: Multiple fields, one exists, one doesn't.
+        fieldsToRevert.clear();
+        fieldsToRevert.add(existingField);
+        fieldsToRevert.add(nonExistingField);
+
+        when(configurationManager.getResource(INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME, resourceName))
+                .thenReturn(mockResource);
+        when(configurationManager.getResource(INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME, nonExistingResourceName))
+                .thenReturn(null);
+
+        service.revertInputValidationConfiguration(fieldsToRevert, tenantName);
+        // ExistingField's resource should be deleted (called once more, total 2 times).
+        verify(configurationManager, times(2)).deleteResource(INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME, resourceName);
+         // NonExistingField's resource should not be deleted (still 0 times for this specific resource).
+        verify(configurationManager, never()).deleteResource(
+                INPUT_VAL_CONFIG_RESOURCE_TYPE_NAME, nonExistingResourceName);
     }
 
     private Resources getResources() {

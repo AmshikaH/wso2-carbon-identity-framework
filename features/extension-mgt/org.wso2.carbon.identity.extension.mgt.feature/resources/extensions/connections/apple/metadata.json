@@ -3,7 +3,7 @@
         "image": "assets/images/logos/apple.svg",
         "header": "Apple",
         "Subheading": "Login users with their Apple IDs.",
-        "documentation": "{ENV}/asgardeo/docs/guides/authentication/social-login/add-apple-login/",
+        "documentation": "",
         "modal": {
             "form": {
                 "fields": [
@@ -91,13 +91,13 @@
                             "value": "redirect_uri"
                         }
                     ],
-                    "header": "Prerequites",
+                    "header": "Prerequisites",
                     "paragraphs": [
                         "Before you begin, create a <strong>Sign in With Apple</strong> enabled application on <a href=\"https://developer.apple.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Apple Developer Portal</a> with a <strong>Services ID</strong> and a <strong>Private Key</strong>."
                     ],
                     "link": {
                         "text": "See Apple's guide on configuring your environment for Sign in with Apple.",
-                        "url": "https://developer.apple.com/documentation/sign_in_with_apple/configuring_your_environment_for_sign_in_with_apple"
+                        "url": "https://developer.apple.com/documentation/signinwithapple/configuring-your-environment-for-sign-in-with-apple"
                     }
                 },
                 "fields": [

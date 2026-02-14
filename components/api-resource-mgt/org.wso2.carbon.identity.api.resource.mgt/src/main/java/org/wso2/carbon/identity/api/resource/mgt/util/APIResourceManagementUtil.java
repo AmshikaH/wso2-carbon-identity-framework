@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2023-2025, WSO2 LLC. (https://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -19,6 +19,7 @@
 package org.wso2.carbon.identity.api.resource.mgt.util;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.api.resource.mgt.APIResourceManagerImpl;
@@ -102,17 +103,10 @@ public class APIResourceManagementUtil {
                 HashMap<String, APIResource> tempConfigs = new HashMap<>(configs);
                 List<APIResource> systemAPIs = getSystemAPIs(tenantDomain);
                 for (APIResource systemAPI : systemAPIs) {
-                    if (tempConfigs.containsKey(systemAPI.getIdentifier())) {
-                        tempConfigs.remove(systemAPI.getIdentifier());
-                    } else {
-                        String apiId = APIResourceManagerImpl.getInstance().getAPIResourceByIdentifier(
-                                systemAPI.getIdentifier(), tenantDomain).getId();
-                        APIResourceManagerImpl.getInstance().deleteAPIResourceById(apiId, tenantDomain);
-                    }
+                    tempConfigs.remove(systemAPI.getIdentifier());
                 }
                 // Register the new system APIs.
                 registerAPIResources(new ArrayList<>(tempConfigs.values()), tenantDomain);
-
                 // Handle duplicate system APIs.
                 for (APIResource oldAPIResource : duplicateConfigs.values()) {
                     // Get the existing API resource from the DB.
@@ -125,7 +119,8 @@ public class APIResourceManagementUtil {
                             .filter(scope1 -> apiResourceFromDB.getScopes().stream()
                                     .noneMatch(scope2 -> scope2.getName().equals(scope1.getName())))
                             .collect(Collectors.toList());
-                    if (addedScopes.isEmpty()) {
+                    if (addedScopes.isEmpty() &&
+                            StringUtils.equals(apiResourceFromDB.getType(), updatedAPIResource.getType())) {
                         continue;
                     }
 
@@ -138,7 +133,7 @@ public class APIResourceManagementUtil {
                             .type(updatedAPIResource.getType())
                             .tenantId(apiResourceFromDB.getTenantId())
                             .requiresAuthorization(apiResourceFromDB.isAuthorizationRequired())
-                            .scopes(updatedAPIResource.getScopes())
+                            .scopes(apiResourceFromDB.getScopes())
                             .subscribedApplications(apiResourceFromDB.getSubscribedApplications())
                             .properties(apiResourceFromDB.getProperties())
                             .build();
@@ -200,10 +195,36 @@ public class APIResourceManagementUtil {
                         APIResourceManagementConstants.ASC, tenantDomain).getAPIResources().isEmpty();
     }
 
+    /**
+     * Checks whether a given API resource is a tenant agnostic API.
+     * This determines whether the API is an Identity Server (IS) management API that is commonly owned by all tenants.
+     * {@code APIResourceTypes.SYSTEM} indicates API resources owned only by the super tenant.
+     *
+     * @param type The API resource type to check.
+     * @return {@code true} if the API resource type is neither "BUSINESS" nor "MCP" nor "SYSTEM".
+     */
     public static boolean isSystemAPI(String type) {
 
-        return !APIResourceManagementConstants.BUSINESS_TYPE.equalsIgnoreCase(type)
-                && !APIResourceManagementConstants.SYSTEM_TYPE.equalsIgnoreCase(type);
+        return !APIResourceManagementConstants.APIResourceTypes.BUSINESS.equalsIgnoreCase(type)
+                && !APIResourceManagementConstants.APIResourceTypes.SYSTEM.equalsIgnoreCase(type)
+                && !APIResourceManagementConstants.APIResourceTypes.MCP.equalsIgnoreCase(type)
+                && !APIResourceManagementConstants.APIResourceTypes.VC.equalsIgnoreCase(type);
+    }
+
+    /**
+     * Determines whether the given API Resource Type is an allowed type for sub-organizations.
+     *
+     * @param type The API Resource Type to check.
+     * @return {@code true} if the API Resource Type is allowed for sub-organizations
+     *         ("ORGANIZATION", "BUSINESS", "CONSOLE_ORG_LEVEL", or "CONSOLE_ORG_FEATURE").
+     *         {@code false} if it is a restricted type ("TENANT", "SYSTEM", or "CONSOLE_FEATURE").
+     */
+    public static boolean isAllowedAPIResourceTypeForOrganizations(String type) {
+
+        return APIResourceManagementConstants.APIResourceTypes.ORGANIZATION.equalsIgnoreCase(type)
+                || APIResourceManagementConstants.APIResourceTypes.BUSINESS.equalsIgnoreCase(type)
+                || APIResourceManagementConstants.APIResourceTypes.CONSOLE_ORG_LEVEL.equalsIgnoreCase(type)
+                || APIResourceManagementConstants.APIResourceTypes.CONSOLE_ORG_FEATURE.equalsIgnoreCase(type);
     }
 
     public static boolean isSystemAPIByAPIId(String apiId) throws APIResourceMgtException {

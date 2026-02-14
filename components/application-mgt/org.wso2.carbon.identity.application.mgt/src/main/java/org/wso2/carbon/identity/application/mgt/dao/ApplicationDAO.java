@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2014-2024, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -25,8 +25,11 @@ import org.wso2.carbon.identity.application.common.model.ApplicationBasicInfo;
 import org.wso2.carbon.identity.application.common.model.LocalAndOutboundAuthenticationConfig;
 import org.wso2.carbon.identity.application.common.model.RoleV2;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
+import org.wso2.carbon.identity.application.common.model.TrustedApp;
+import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants.PlatformType;
 
 import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -200,14 +203,42 @@ public interface ApplicationDAO {
     }
 
     /**
+     * Retrieve application basic information using the sp metadata property key and value.
+     *
+     * @param key Name of the sp metadata property key
+     * @param value Value of the sp metadata property
+     * @return ApplicationBasicInfo containing the basic app information
+     * @throws IdentityApplicationManagementException if building {@link ApplicationBasicInfo} fails.
+     */
+    default ApplicationBasicInfo[] getApplicationBasicInfoBySPProperty(String key, String value)
+            throws IdentityApplicationManagementException {
+
+        return null;
+    }
+
+    /**
      * Retrieve application basic information using the application name.
      *
      * @param name          Name of the application
      * @param tenantDomain  Tenant domain of the application
      * @return ApplicationBasicInfo containing the basic app information
-     * @throws IdentityApplicationManagementException
+     * @throws IdentityApplicationManagementException if building {@link ApplicationBasicInfo} fails.
      */
     default ApplicationBasicInfo getApplicationBasicInfoByName(String name, String tenantDomain)
+            throws IdentityApplicationManagementException {
+
+        throw new NotImplementedException();
+    }
+
+    /**
+     * Retrieve application UUID using the application name.
+     *
+     * @param name         Name of the application
+     * @param tenantDomain Tenant domain of the application
+     * @return Application UUID
+     * @throws IdentityApplicationManagementException
+     */
+    default String getApplicationUUIDByName(String name, String tenantDomain)
             throws IdentityApplicationManagementException {
 
         throw new NotImplementedException();
@@ -352,6 +383,48 @@ public interface ApplicationDAO {
     }
 
     /**
+     * Method that returns the shared application id in the given shared organization for the given main application.
+     *
+     * @param mainAppId   Main application id.
+     * @param ownerOrgId  Owner organization id of the main application.
+     * @param sharedOrgId Shared organization id for which the shared application id is requested.
+     * @return Shared application id in the given shared organization for the given main application.
+     * @throws IdentityApplicationManagementServerException Error when obtaining shared application id.
+     */
+    default String getSharedAppId(String mainAppId, String ownerOrgId, String sharedOrgId)
+            throws IdentityApplicationManagementServerException {
+
+        throw new NotImplementedException();
+    }
+
+    /**
+     * Method that returns the id the owner organization of the main application of the given shared app.
+     *
+     * @param sharedAppId Shared application id.
+     * @return Owner organization id of the given shared application.
+     * @throws IdentityApplicationManagementServerException Error when obtaining owner organization id.
+     */
+    default String getOwnerOrgId(String sharedAppId) throws IdentityApplicationManagementServerException {
+
+        throw new NotImplementedException();
+    }
+
+    /**
+     * Method that returns the shared application ids of the main application.
+     *
+     * @param mainAppId    Main application id.
+     * @param ownerOrgId   Owner organization id.
+     * @param sharedOrgIds List of shared organization ids.
+     * @return Map containing shared application ids and their organization ids.
+     * @throws IdentityApplicationManagementServerException Error when obtaining shared applications.
+     */
+    default Map<String, String> getSharedApplicationIds(String mainAppId, String ownerOrgId, List<String> sharedOrgIds)
+            throws IdentityApplicationManagementServerException {
+
+        throw new NotImplementedException();
+    }
+
+    /**
      * Method that returns the tenant id of the application.
      *
      * @param applicationId Application id.
@@ -403,5 +476,46 @@ public interface ApplicationDAO {
             throws IdentityApplicationManagementException {
 
         throw new NotImplementedException();
+    }
+
+    /**
+     * Returns the list of trusted applications of all tenants based on the requested platform type.
+     *
+     * @param platformType Platform type of the trusted apps.
+     * @return List of trusted apps of all tenants.
+     * @throws IdentityApplicationManagementException If an error occurs while retrieving the trusted apps.
+     */
+    default List<TrustedApp> getTrustedApps(PlatformType platformType) throws IdentityApplicationManagementException {
+
+        return new ArrayList<>();
+    }
+
+    /**
+     * Retrieve the service provider resource IDs associated with the default federated IDP authenticator.
+     *
+     * @param idpName                  Name of the identity provider.
+     * @param defaultAuthenticatorName default authenticator name.
+     * @param tenantDomain             Tenant domain of Identity Provider.
+     * @return SPs resource ID list.
+     * @throws IdentityApplicationManagementException Error when getting SP resource IDs.
+     */
+    default String[] getSPsAssociatedWithFederatedIDPAuthenticator(String idpName,
+                                                                   String defaultAuthenticatorName,
+                                                                   String tenantDomain)
+            throws IdentityApplicationManagementException {
+
+        return new String[0];
+    }
+
+    /**
+     * Update the local and outbound authentication configuration of a service provider.
+     *
+     * @param applicationDTO Updated service provider instance.
+     * @param tenantDomain   Tenant domain of Service Provider.
+     * @throws IdentityApplicationManagementException Error when updating local and outbound auth configs for the SP.
+     */
+    default void updateApplicationLocalAndOutboundAuthConfig(ServiceProvider applicationDTO, String tenantDomain)
+            throws IdentityApplicationManagementException {
+
     }
 }

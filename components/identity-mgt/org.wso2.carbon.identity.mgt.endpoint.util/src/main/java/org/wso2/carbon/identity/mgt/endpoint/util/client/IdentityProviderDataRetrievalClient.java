@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2022-2024, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -24,23 +24,17 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.owasp.encoder.Encode;
-import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
 import org.wso2.carbon.identity.mgt.endpoint.util.IdentityManagementEndpointUtil;
 import org.wso2.carbon.identity.mgt.endpoint.util.IdentityManagementServiceUtil;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
@@ -77,29 +71,26 @@ public class IdentityProviderDataRetrievalClient {
     public String getIdPImage(String tenant, String idpName)
             throws IdentityProviderDataRetrievalClientException {
 
-        try (CloseableHttpClient httpclient = HttpClientBuilder.create().useSystemProperties().build()) {
+        try {
             HttpGet request = new HttpGet(getIdPEndpoint(tenant) + IDP_FILTER +
                             Encode.forUriComponent(idpName));
             setAuthorizationHeader(request);
 
-            try (CloseableHttpResponse response = httpclient.execute(request)) {
+            String responseString = IdentityManagementEndpointUtil.getHttpClientResponseString(request);
 
-                if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
-                    JSONObject jsonResponse = new JSONObject(
-                            new JSONTokener(new InputStreamReader(response.getEntity().getContent())));
-                    JSONArray idps = jsonResponse.getJSONArray(IDP_KEY);
+            if (!StringUtils.isEmpty(responseString)) {
+                JSONObject jsonResponse = new JSONObject(new JSONTokener(responseString));
+                JSONArray idps = jsonResponse.getJSONArray(IDP_KEY);
 
-                    if (idps.length() != 1) {
-                        return StringUtils.EMPTY;
-                    }
-
-                    JSONObject idp = (JSONObject) idps.get(0);
-
-                    return idp.getString(IMAGE_KEY);
+                if (idps.length() != 1) {
+                    return StringUtils.EMPTY;
                 }
-            } finally {
-                request.releaseConnection();
+
+                JSONObject idp = (JSONObject) idps.get(0);
+
+                return idp.getString(IMAGE_KEY);
             }
+            return StringUtils.EMPTY;
         } catch (IOException | JSONException e) {
             String msg = "Error while getting image of " + idpName + " in tenant : " + tenant;
 
@@ -109,8 +100,6 @@ public class IdentityProviderDataRetrievalClient {
 
             throw new IdentityProviderDataRetrievalClientException(msg, e);
         }
-
-        return StringUtils.EMPTY;
     }
 
     /**
@@ -215,24 +204,21 @@ public class IdentityProviderDataRetrievalClient {
      */
     private JSONObject executePath(String tenant, String path) throws IdentityProviderDataRetrievalClientException {
 
-        try (CloseableHttpClient httpclient = HttpClientBuilder.create().useSystemProperties().build()) {
+        try {
             String url = getEndpoint(tenant, path);
             HttpGet httpGet = new HttpGet(url);
             setAuthorizationHeader(httpGet);
 
-            try (CloseableHttpResponse response = httpclient.execute(httpGet)) {
-                if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
-                    return new JSONObject(
-                            new JSONTokener(new InputStreamReader(response.getEntity().getContent())));
-                }
-            } finally {
-                httpGet.releaseConnection();
+            String responseString = IdentityManagementEndpointUtil.getHttpClientResponseString(httpGet);
+
+            if (!StringUtils.isEmpty(responseString)) {
+                return new JSONObject(new JSONTokener(responseString));
             }
+            return null;
         } catch (IdentityProviderDataRetrievalClientException | IOException e) {
             throw new IdentityProviderDataRetrievalClientException(
                     "Error while executing the path " + path + " in tenant : " + tenant, e);
         }
-        return null;
     }
 
     /**
@@ -271,7 +257,7 @@ public class IdentityProviderDataRetrievalClient {
      *
      * @param httpMethod HTTP request method.
      */
-    private void setAuthorizationHeader(HttpRequestBase httpMethod) {
+    private void setAuthorizationHeader(HttpUriRequestBase httpMethod) {
 
         String toEncode = IdentityManagementServiceUtil.getInstance().getAppName() + ":"
                 + String.valueOf(IdentityManagementServiceUtil.getInstance().getAppPassword());

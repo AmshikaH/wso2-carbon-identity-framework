@@ -1,24 +1,25 @@
 /*
- *  Copyright (c) 2019, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ * Copyright (c) 2019-2026, WSO2 LLC. (http://www.wso2.com).
  *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *  http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
 package org.wso2.carbon.identity.configuration.mgt.core;
 
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.testng.PowerMockTestCase;
 import org.junit.Assert;
+import org.mockito.MockedStatic;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -45,6 +46,10 @@ import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.core.util.JdbcUtils;
 import org.apache.commons.io.FileUtils;
+import org.wso2.carbon.identity.organization.management.service.OrganizationManager;
+import org.wso2.carbon.identity.organization.management.service.util.OrganizationManagementUtil;
+import org.wso2.carbon.identity.organization.management.service.util.Utils;
+import org.wso2.carbon.identity.organization.resource.hierarchy.traverse.service.OrgResourceResolverService;
 
 import java.io.File;
 import java.io.InputStream;
@@ -55,29 +60,38 @@ import java.util.List;
 import javax.sql.DataSource;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.wso2.carbon.base.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
 import static org.wso2.carbon.base.MultitenantConstants.SUPER_TENANT_ID;
+import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.INHERITABLE_SAMPLE_RESOURCE_TYPE_NAME;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.SAMPLE_ATTRIBUTE_NAME1;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.SAMPLE_ATTRIBUTE_VALUE3_UPDATED;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.SAMPLE_RESOURCE_NAME1;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.SAMPLE_RESOURCE_TYPE_NAME1;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.SAMPLE_TENANT_DOMAIN_ABC;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.SAMPLE_TENANT_ID_ABC;
+import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestConstants.TEST_ORG_ID;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.TestSQLConstants.REMOVE_CREATED_TIME_COLUMN_H2;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.closeH2Base;
+import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getInheritableSampleResourceTypeAdd;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleAttribute1;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleAttribute3;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleResource1Add;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleResource2Add;
+import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleResource3Add;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleResourceType2Add;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleResourceTypeAdd;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSampleSearchCondition;
@@ -85,12 +99,20 @@ import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.ini
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.spyConnection;
 import static org.wso2.carbon.identity.configuration.mgt.core.util.TestUtils.getSamplesPath;
 
-@PrepareForTest({PrivilegedCarbonContext.class, IdentityDatabaseUtil.class, IdentityUtil.class,
-        IdentityTenantUtil.class})
-public class ConfigurationManagerTest extends PowerMockTestCase {
+public class ConfigurationManagerTest {
 
     private ConfigurationManager configurationManager;
     private Connection connection;
+    private OrganizationManager organizationManager;
+    private OrgResourceResolverService orgResourceResolverService;
+
+    private MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil;
+    private MockedStatic<PrivilegedCarbonContext> privilegedCarbonContext;
+    private MockedStatic<IdentityTenantUtil> identityTenantUtil;
+    private MockedStatic<IdentityUtil> identityUtil;
+    private MockedStatic<OrganizationManagementUtil> organizationManagementUtilMockedStatic;
+    private MockedStatic<Utils> utilsMockedStatic;
+
 
     @BeforeMethod
     public void setUp() throws Exception {
@@ -101,14 +123,26 @@ public class ConfigurationManagerTest extends PowerMockTestCase {
         System.setProperty(CarbonBaseConstants.CARBON_CONFIG_DIR_PATH, Paths.get(carbonHome, "conf").toString());
 
         DataSource dataSource = mock(DataSource.class);
-        mockStatic(IdentityDatabaseUtil.class);
-        when(IdentityDatabaseUtil.getDataSource()).thenReturn(dataSource);
+
+        identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+        identityDatabaseUtil.when(IdentityDatabaseUtil::getDataSource).thenReturn(dataSource);
 
         connection = TestUtils.getConnection();
         Connection spyConnection = spyConnection(connection);
         when(dataSource.getConnection()).thenReturn(spyConnection);
 
-        prepareConfigs();
+        privilegedCarbonContext = mockStatic(PrivilegedCarbonContext.class);
+        identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+        identityUtil = mockStatic(IdentityUtil.class);
+        prepareConfigs(privilegedCarbonContext, identityTenantUtil, identityUtil);
+
+        organizationManager = mock(OrganizationManager.class);
+        ConfigurationManagerComponentDataHolder.getInstance().setOrganizationManager(organizationManager);
+        organizationManagementUtilMockedStatic = mockStatic(OrganizationManagementUtil.class);
+        utilsMockedStatic = mockStatic(Utils.class);
+
+        orgResourceResolverService = mock(OrgResourceResolverService.class);
+        ConfigurationManagerComponentDataHolder.getInstance().setOrgResourceResolverService(orgResourceResolverService);
 
         ConfigurationManagerComponentDataHolder.getInstance().setConfigurationManagementEnabled(true);
     }
@@ -118,6 +152,13 @@ public class ConfigurationManagerTest extends PowerMockTestCase {
 
         connection.close();
         closeH2Base();
+
+        identityDatabaseUtil.close();
+        privilegedCarbonContext.close();
+        identityTenantUtil.close();
+        identityUtil.close();
+        organizationManagementUtilMockedStatic.close();
+        utilsMockedStatic.close();
     }
 
     @Test(priority = 1)
@@ -206,6 +247,7 @@ public class ConfigurationManagerTest extends PowerMockTestCase {
 
         Resource resource = configurationManager.addResource(resourceType.getName(), resourceTypeAdd);
         assertNotNull(resource.getResourceId(), "Created resource type id cannot be null");
+        assertTrue(resource.isHasAttribute());
     }
 
     @Test(priority = 10, expectedExceptions = ConfigurationManagementClientException.class)
@@ -413,12 +455,12 @@ public class ConfigurationManagerTest extends PowerMockTestCase {
 
         ResourceType resourceType = configurationManager.addResourceType(getSampleResourceTypeAdd());
         configurationManager.addResource(resourceType.getName(), getSampleResource1Add());
-        mockCarbonContextForTenant(SAMPLE_TENANT_ID_ABC, SAMPLE_TENANT_DOMAIN_ABC);
+        mockCarbonContextForTenant(SAMPLE_TENANT_ID_ABC, SAMPLE_TENANT_DOMAIN_ABC, privilegedCarbonContext);
         configurationManager.addResource(resourceType.getName(), getSampleResource2Add());
 
-        mockIdentityTenantUtilForTheTest();
+        mockIdentityTenantUtilForTheTest(identityTenantUtil);
         // Mock carbon context back to the super tenant.
-        mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME);
+        mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME, privilegedCarbonContext);
 
         ComplexCondition condition = getSampleSearchCondition();
         Resources resources = configurationManager.getTenantResources(condition);
@@ -566,12 +608,12 @@ public class ConfigurationManagerTest extends PowerMockTestCase {
 
         ResourceType resourceType = configurationManager.addResourceType(getSampleResourceTypeAdd());
         configurationManager.addResource(resourceType.getName(), getSampleResource1Add());
-        mockCarbonContextForTenant(SAMPLE_TENANT_ID_ABC, SAMPLE_TENANT_DOMAIN_ABC);
+        mockCarbonContextForTenant(SAMPLE_TENANT_ID_ABC, SAMPLE_TENANT_DOMAIN_ABC, privilegedCarbonContext);
         configurationManager.addResource(resourceType.getName(), getSampleResource2Add());
 
-        mockIdentityTenantUtilForTheTest();
+        mockIdentityTenantUtilForTheTest(identityTenantUtil);
         // Mock carbon context back to the super tenant.
-        mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME);
+        mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME, privilegedCarbonContext);
 
         ComplexCondition condition = getSampleSearchCondition();
         Resources resources = configurationManager.getTenantResources(SAMPLE_TENANT_DOMAIN_ABC, condition);
@@ -600,21 +642,90 @@ public class ConfigurationManagerTest extends PowerMockTestCase {
                 resourcesByType.getResources().size() == 0);
     }
 
+    @Test (priority = 35)
+    public void testGetInheritedResourcesByType() throws Exception {
+
+        organizationManagementUtilMockedStatic.when(() -> OrganizationManagementUtil.isOrganization(anyString()))
+                .thenReturn(true);
+        utilsMockedStatic.when(() -> Utils.isLoginAndRegistrationConfigInheritanceEnabled(any())).thenReturn(true);
+        when(organizationManager.resolveOrganizationId(anyString())).thenReturn(TEST_ORG_ID);
+
+        ResourceType resourceType = configurationManager.addResourceType(getInheritableSampleResourceTypeAdd());
+        Resource resource1 = configurationManager.addResource(resourceType.getName(), getSampleResource1Add());
+        when(orgResourceResolverService.getResourcesFromOrgHierarchy(
+                eq(TEST_ORG_ID), any(), any())).thenReturn(List.of(resource1));
+
+        Resources returnedResources = configurationManager.getResourcesByType(INHERITABLE_SAMPLE_RESOURCE_TYPE_NAME);
+        verify(orgResourceResolverService, times(1)).getResourcesFromOrgHierarchy(
+                eq(TEST_ORG_ID), any(), any());
+        org.testng.Assert.assertFalse(returnedResources.getResources().isEmpty());
+    }
+
+    @Test (priority = 34)
+    public void testGetInheritedResourcesByTypeInheritanceDisabled() throws Exception {
+
+        organizationManagementUtilMockedStatic.when(() -> OrganizationManagementUtil.isOrganization(anyString()))
+                .thenReturn(true);
+        utilsMockedStatic.when(() -> Utils.isLoginAndRegistrationConfigInheritanceEnabled(any())).thenReturn(false);
+        when(organizationManager.resolveOrganizationId(anyString())).thenReturn(TEST_ORG_ID);
+
+        ResourceType resourceType = configurationManager.addResourceType(getInheritableSampleResourceTypeAdd());
+        Resource resource1 = configurationManager.addResource(resourceType.getName(), getSampleResource1Add());
+        when(orgResourceResolverService.getResourcesFromOrgHierarchy(
+                eq(TEST_ORG_ID), any(), any())).thenReturn(List.of(resource1));
+
+        Resources returnedResources = configurationManager.getResourcesByType(INHERITABLE_SAMPLE_RESOURCE_TYPE_NAME);
+        verify(orgResourceResolverService, times(0)).getResourcesFromOrgHierarchy(
+                eq(TEST_ORG_ID), any(), any());
+        org.testng.Assert.assertFalse(returnedResources.getResources().isEmpty());
+    }
+
+    @Test (priority = 36)
+    public void testGetInheritedResource() throws Exception {
+
+        organizationManagementUtilMockedStatic.when(() -> OrganizationManagementUtil.isOrganization(anyString()))
+                .thenReturn(true);
+        utilsMockedStatic.when(() -> Utils.isLoginAndRegistrationConfigInheritanceEnabled(any())).thenReturn(true);
+        when(organizationManager.resolveOrganizationId(anyString())).thenReturn(TEST_ORG_ID);
+
+        ResourceType resourceType = configurationManager.addResourceType(getInheritableSampleResourceTypeAdd());
+        Resource resource1 = configurationManager.addResource(resourceType.getName(), getSampleResource1Add());
+        when(orgResourceResolverService.getResourcesFromOrgHierarchy(
+                eq(TEST_ORG_ID), any(), any())).thenReturn(resource1);
+
+        Resource returnedResource = configurationManager.getResource(INHERITABLE_SAMPLE_RESOURCE_TYPE_NAME,
+                SAMPLE_RESOURCE_NAME1, true);
+        verify(orgResourceResolverService, times(1)).getResourcesFromOrgHierarchy(
+                eq(TEST_ORG_ID), any(), any());
+        Assert.assertNotNull(returnedResource);
+    }
+
+    @Test(priority = 37)
+    public void testAddResourceWithoutAttributes() throws Exception {
+
+        ResourceType resourceType = configurationManager.addResourceType(getSampleResourceTypeAdd());
+        ResourceAdd resourceTypeAdd = getSampleResource3Add();
+
+        Resource resource = configurationManager.addResource(resourceType.getName(), resourceTypeAdd);
+        assertFalse(resource.isHasAttribute());
+    }
+
     private void removeCreatedTimeColumn() throws DataAccessException {
 
         JdbcTemplate jdbcTemplate = JdbcUtils.getNewTemplate();
         jdbcTemplate.executeUpdate(REMOVE_CREATED_TIME_COLUMN_H2);
     }
 
-    private void mockIdentityTenantUtilForTheTest() {
+    private void mockIdentityTenantUtilForTheTest(MockedStatic<IdentityTenantUtil> identityTenantUtil) {
 
-        mockStatic(IdentityTenantUtil.class);
-        IdentityTenantUtil identityTenantUtil = mock(IdentityTenantUtil.class);
-
-        when(identityTenantUtil.getTenantId(SUPER_TENANT_DOMAIN_NAME)).thenReturn(SUPER_TENANT_ID);
-        when(identityTenantUtil.getTenantId(SAMPLE_TENANT_DOMAIN_ABC)).thenReturn(SAMPLE_TENANT_ID_ABC);
-        when(identityTenantUtil.getTenantDomain(SUPER_TENANT_ID)).thenReturn(SUPER_TENANT_DOMAIN_NAME);
-        when(identityTenantUtil.getTenantDomain(SAMPLE_TENANT_ID_ABC)).thenReturn(SAMPLE_TENANT_DOMAIN_ABC);
+        identityTenantUtil.when(() -> IdentityTenantUtil.getTenantId(SUPER_TENANT_DOMAIN_NAME))
+                .thenReturn(SUPER_TENANT_ID);
+        identityTenantUtil.when(() -> IdentityTenantUtil.getTenantId(SAMPLE_TENANT_DOMAIN_ABC))
+                .thenReturn(SAMPLE_TENANT_ID_ABC);
+        identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(SUPER_TENANT_ID))
+                .thenReturn(SUPER_TENANT_DOMAIN_NAME);
+        identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(SAMPLE_TENANT_ID_ABC))
+                .thenReturn(SAMPLE_TENANT_DOMAIN_ABC);
     }
 
     private boolean isSearchConditionMatch(Resources resources) {
@@ -648,37 +759,36 @@ public class ConfigurationManagerTest extends PowerMockTestCase {
         return true;
     }
 
-    private void prepareConfigs() throws Exception {
+    private void prepareConfigs(MockedStatic<PrivilegedCarbonContext> privilegedCarbonContext,
+                                MockedStatic<IdentityTenantUtil> identityTenantUtil,
+                                MockedStatic<IdentityUtil> identityUtil) throws Exception {
 
         // Mock get maximum query length call.
-        mockStatic(IdentityUtil.class);
-        when(IdentityUtil.getProperty(any(String.class))).thenReturn("4194304");
-        when(IdentityUtil.getEndpointURIPath(any(String.class), anyBoolean(), anyBoolean())).thenReturn(
-                "/t/bob.com/api/identity/config-mgt/v1.0/resource/file/publisher/SMSPublisher/9e038218-8e99-4dae-bf83-a78f5dcd73a8");
+        identityUtil.when(() -> IdentityUtil.getProperty(any(String.class))).thenReturn("4194304");
+        identityUtil.when(() -> IdentityUtil.getEndpointURIPath(any(String.class), anyBoolean(), anyBoolean()))
+                .thenReturn(
+                        "/t/bob.com/api/identity/config-mgt/v1.0/resource/file/publisher/SMSPublisher/9e038218-8e99-" +
+                                "4dae-bf83-a78f5dcd73a8");
         ConfigurationManagerComponentDataHolder.setUseCreatedTime(true);
         ConfigurationManagerConfigurationHolder configurationHolder = new ConfigurationManagerConfigurationHolder();
         ConfigurationDAO configurationDAO = new ConfigurationDAOImpl();
         configurationHolder.setConfigurationDAOS(Collections.singletonList(configurationDAO));
-        mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME);
-        mockIdentityTenantUtility();
+        mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME, privilegedCarbonContext);
+        identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(any(Integer.class)))
+                .thenReturn(SUPER_TENANT_DOMAIN_NAME);
+
         configurationManager = new ConfigurationManagerImpl(configurationHolder);
     }
 
-    private void mockCarbonContextForTenant(int tenantId, String tenantDomain) {
+    private void mockCarbonContextForTenant(int tenantId, String tenantDomain,
+                                            MockedStatic<PrivilegedCarbonContext> privilegedCarbonContext) {
 
-        mockStatic(PrivilegedCarbonContext.class);
-        PrivilegedCarbonContext privilegedCarbonContext = mock(PrivilegedCarbonContext.class);
+        PrivilegedCarbonContext mockPrivilegedCarbonContext = mock(PrivilegedCarbonContext.class);
 
-        when(PrivilegedCarbonContext.getThreadLocalCarbonContext()).thenReturn(privilegedCarbonContext);
-        when(privilegedCarbonContext.getTenantDomain()).thenReturn(tenantDomain);
-        when(privilegedCarbonContext.getTenantId()).thenReturn(tenantId);
-        when(privilegedCarbonContext.getUsername()).thenReturn("admin");
-    }
-
-    private void mockIdentityTenantUtility() {
-
-        mockStatic(IdentityTenantUtil.class);
-        IdentityTenantUtil identityTenantUtil = mock(IdentityTenantUtil.class);
-        when(identityTenantUtil.getTenantDomain(any(Integer.class))).thenReturn(SUPER_TENANT_DOMAIN_NAME);
+        privilegedCarbonContext.when(
+                PrivilegedCarbonContext::getThreadLocalCarbonContext).thenReturn(mockPrivilegedCarbonContext);
+        when(mockPrivilegedCarbonContext.getTenantDomain()).thenReturn(tenantDomain);
+        when(mockPrivilegedCarbonContext.getTenantId()).thenReturn(tenantId);
+        when(mockPrivilegedCarbonContext.getUsername()).thenReturn("admin");
     }
 }

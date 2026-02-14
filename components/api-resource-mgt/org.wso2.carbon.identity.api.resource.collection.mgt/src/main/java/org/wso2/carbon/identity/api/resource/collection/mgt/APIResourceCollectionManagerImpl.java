@@ -19,6 +19,7 @@
 package org.wso2.carbon.identity.api.resource.collection.mgt;
 
 import org.apache.commons.collections.CollectionUtils;
+import org.osgi.annotation.bundle.Capability;
 import org.wso2.carbon.identity.api.resource.collection.mgt.constant.APIResourceCollectionManagementConstants;
 import org.wso2.carbon.identity.api.resource.collection.mgt.exception.APIResourceCollectionMgtException;
 import org.wso2.carbon.identity.api.resource.collection.mgt.internal.APIResourceCollectionMgtServiceDataHolder;
@@ -45,6 +46,13 @@ import static org.wso2.carbon.identity.api.resource.collection.mgt.util.APIResou
 /**
  * API Resource Collection Manager Implementation.
  */
+@Capability(
+        namespace = "osgi.service",
+        attribute = {
+                "objectClass=org.wso2.carbon.identity.api.resource.collection.mgt.APIResourceCollectionManager",
+                "service.scope=singleton"
+        }
+)
 public class APIResourceCollectionManagerImpl implements APIResourceCollectionManager {
 
     private static final APIResourceCollectionManagerImpl INSTANCE;
@@ -138,10 +146,8 @@ public class APIResourceCollectionManagerImpl implements APIResourceCollectionMa
             clonedCollection.setApiResources(apiResourcesMap);
             return clonedCollection;
         } catch (APIResourceMgtException e) {
-            throw handleServerException(
-                    APIResourceCollectionManagementConstants.ErrorMessages
-                            .ERROR_CODE_ERROR_WHILE_RETRIEVING_SCOPE_METADATA,
-                    e);
+            throw handleServerException(APIResourceCollectionManagementConstants.ErrorMessages
+                    .ERROR_CODE_ERROR_WHILE_RETRIEVING_SCOPE_METADATA, e);
         }
     }
 
@@ -152,9 +158,8 @@ public class APIResourceCollectionManagerImpl implements APIResourceCollectionMa
         }
         Set<String> scopeSet = new HashSet<>(scopes);
         return apiResources.stream()
-                .filter(apiResource ->
-                        apiResource.getScopes().stream().anyMatch(scope -> scopeSet.contains(scope.getName()))
-                       )
+                .filter(apiResource -> apiResource.getScopes().stream()
+                        .anyMatch(scope -> scopeSet.contains(scope.getName())))
                 .map(apiResource -> filterAPIResourceScopes(apiResource, scopeSet))
                 .collect(Collectors.toList());
     }
@@ -194,6 +199,10 @@ public class APIResourceCollectionManagerImpl implements APIResourceCollectionMa
                 .type(apiResourceCollection.getType())
                 .readScopes(apiResourceCollection.getReadScopes())
                 .writeScopes(apiResourceCollection.getWriteScopes())
+                .legacyReadScopes(apiResourceCollection.getLegacyReadScopes())
+                .legacyWriteScopes(apiResourceCollection.getLegacyWriteScopes())
+                .viewFeatureScope(apiResourceCollection.getViewFeatureScope())
+                .editFeatureScope(apiResourceCollection.getEditFeatureScope())
                 .apiResources(apiResourceCollection.getApiResources())
                 .build();
     }

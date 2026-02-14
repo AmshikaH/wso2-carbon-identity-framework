@@ -27,10 +27,13 @@ public class IdentityCoreConstants {
     public static final String HOST_NAME = "HostName";
     public static final String MGT_CONSOLE_HOST_NAME = "MgtHostName";
     public static final String SERVER_HOST_NAME = "ServerHostName";
+    public static final String SKIP_LOCAL_USER_CLAIM_UPDATE = "SkipLocalUserClaimUpdate";
     public static final String AUTHENTICATION_ENDPOINT_HOST_NAME = "AuthenticationEndpoint.HostName";
     public static final String AUTHENTICATION_ENDPOINT_PATH = "AuthenticationEndpoint.Path";
     public static final String RECOVERY_ENDPOINT_HOST_NAME = "RecoveryEndpoint.HostName";
     public static final String RECOVERY_ENDPOINT_PATH = "RecoveryEndpoint.Path";
+    public static final String ACCOUNTS_HOST_NAME = "Accounts.HostName";
+    public static final String ACCOUNTS_PATH = "Accounts.Path";
     public static final String FILE_NAME_REGEX = "FileNameRegEx";
     public static final String PORTS_OFFSET = "Ports.Offset";
 
@@ -84,14 +87,21 @@ public class IdentityCoreConstants {
     public static final String ADMIN_FORCED_USER_PASSWORD_RESET_VIA_OTP_MISMATCHED_ERROR_CODE = "17008";
     public static final String USER_ACCOUNT_PENDING_APPROVAL_ERROR_CODE = "17009";
     public static final String USER_INVALID_CREDENTIALS = "17010";
+    public static final String LOGIN_FAILED_GENERIC_ERROR_CODE = "17011";
+    public static final String USER_EMAIL_NOT_VERIFIED_ERROR_CODE = "17012";
+    public static final String ASK_PASSWORD_SET_PASSWORD_VIA_OTP_ERROR_CODE = "17013";
+    public static final String ASK_PASSWORD_SET_PASSWORD_VIA_OTP_MISMATCHED_ERROR_CODE = "17014";
+    public static final String USER_EMAIL_OTP_NOT_VERIFIED_ERROR_CODE = "17015";
 
     public static final String USER_ACCOUNT_STATE = "UserAccountState";
 
     // Pagination constants.
     public static final int DEFAULT_MAXIMUM_ITEMS_PRE_PAGE = 100;
     public static final int DEFAULT_ITEMS_PRE_PAGE = 15;
+    public static final int USERS_LIST_PER_ROLE_LOWER_BOUND = 1000;
     public static final String MAXIMUM_ITEMS_PRE_PAGE_PROPERTY = "MaximumItemsPerPage";
     public static final String DEFAULT_ITEMS_PRE_PAGE_PROPERTY = "DefaultItemsPerPage";
+    public static final String MAXIMUM_USERS_LIST_PER_ROLE_PROPERTY = "MaximumUsersListPerRole";
 
     //DB constants
     public static final String H2 = "H2";
@@ -104,11 +114,40 @@ public class IdentityCoreConstants {
     public static final String MICROSOFT = "Microsoft";
     public static final String S_MICROSOFT = "microsoft";
 
+    // SCIM2 constants.
+    public static final String SCIM2_USER_MAX_ITEMS_PER_PAGE_ENABLED = "SCIM2.UserEndpointMaxItemsPerPageEnabled";
+
+    // Actions constants.
+    public static final String MAXIMUM_ACTIONS_PER_TYPE_PROPERTY = "Actions.MaximumActionsPerType";
+
+    // Webhook constants.
+    public static final String MAXIMUM_WEBHOOKS_PER_TENANT_PROPERTY = "Webhooks.MaximumWebhooksPerTenant";
+
+    // System application constants
+    public static final String CONSOLE_APPLICATION_CLIENT_ID = "CONSOLE";
+    public static final String MY_ACCOUNT_APPLICATION_CLIENT_ID = "MY_ACCOUNT";
+
+    // Thread local property keys for system applications
+    public static final String IS_SYSTEM_APPLICATION = "IsSystemApplication";
+
+    public static final int DEFAULT_MAXIMUM_ACTIONS_PER_TYPE = 1;
+
+    public static final int DEFAULT_MAXIMUM_WEBHOOKS_PER_TENANT = 10;
+
+    // Agentic AI constants
+    public static final String AGENT_IDENTITY_ENABLE = "AgentIdentity.Enabled";
+    public static final String AGENT_IDENTITY_USERSTORE_NAME = "AgentIdentity.Userstore";
+    public static final String DEFAULT_AGENT_IDENTITY_USERSTORE_NAME = "AGENT";
+
+    public static final int MAXIMUM_ALLOWED_JWT_PAYLOAD_JSON_DEPTH = 255;
+
     public static class Filter {
 
         public static final String AND = "and";
         public static final String OR = "or";
         public static final String NOT = "not";
+
+        public static final String PR = "pr";
     }
 
     public static enum UserStoreState {
@@ -131,4 +170,5 @@ public class IdentityCoreConstants {
 
     private IdentityCoreConstants(){
     }
+
 }

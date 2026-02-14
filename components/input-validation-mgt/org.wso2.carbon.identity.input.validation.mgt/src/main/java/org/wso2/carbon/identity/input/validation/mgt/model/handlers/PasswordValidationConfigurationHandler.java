@@ -73,11 +73,11 @@ public class PasswordValidationConfigurationHandler extends AbstractFieldValidat
 
                 if (isRuleBasedValidationByDefault()) {
                     rules.add(getRuleConfig(LengthValidator.class.getSimpleName(), MIN_LENGTH, "8"));
-                    rules.add(getRuleConfig(LengthValidator.class.getSimpleName(), MAX_LENGTH, "30"));
+                    rules.add(getRuleConfig(LengthValidator.class.getSimpleName(), MAX_LENGTH, "64"));
                     rules.add(getRuleConfig(NumeralValidator.class.getSimpleName(), MIN_LENGTH, "1"));
                     rules.add(getRuleConfig(UpperCaseValidator.class.getSimpleName(), MIN_LENGTH, "1"));
                     rules.add(getRuleConfig(LowerCaseValidator.class.getSimpleName(), MIN_LENGTH, "1"));
-                    rules.add(getRuleConfig(SpecialCharacterValidator.class.getSimpleName(), MIN_LENGTH, "1"));
+                    rules.add(getRuleConfig(SpecialCharacterValidator.class.getSimpleName(), MIN_LENGTH, "0"));
                     configuration.setRules(rules);
                 } else {
                     rules.add(getRuleConfig("JsRegExValidator", JS_REGEX, jsRegex));
@@ -85,11 +85,11 @@ public class PasswordValidationConfigurationHandler extends AbstractFieldValidat
                 }
             } else {
                 rules.add(getRuleConfig(LengthValidator.class.getSimpleName(), MIN_LENGTH, "8"));
-                rules.add(getRuleConfig(LengthValidator.class.getSimpleName(), MAX_LENGTH, "30"));
+                rules.add(getRuleConfig(LengthValidator.class.getSimpleName(), MAX_LENGTH, "64"));
                 rules.add(getRuleConfig(NumeralValidator.class.getSimpleName(), MIN_LENGTH, "1"));
                 rules.add(getRuleConfig(UpperCaseValidator.class.getSimpleName(), MIN_LENGTH, "1"));
                 rules.add(getRuleConfig(LowerCaseValidator.class.getSimpleName(), MIN_LENGTH, "1"));
-                rules.add(getRuleConfig(SpecialCharacterValidator.class.getSimpleName(), MIN_LENGTH, "1"));
+                rules.add(getRuleConfig(SpecialCharacterValidator.class.getSimpleName(), MIN_LENGTH, "0"));
                 configuration.setRules(rules);
             }
             return configuration;

@@ -19,9 +19,9 @@ package org.wso2.carbon.identity.claim.metadata.mgt.model;
 import org.wso2.carbon.identity.claim.metadata.mgt.util.ClaimConstants;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Represents the metadata of a local claim.
@@ -66,5 +66,14 @@ public class LocalClaim extends Claim {
 
     public void setMappedAttribute(AttributeMapping mappedAttribute) {
         this.mappedAttributes.add(mappedAttribute);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+
+        if (!(o instanceof LocalClaim)) return false;
+        if (!super.equals(o)) return false;
+        LocalClaim that = (LocalClaim) o;
+        return Objects.equals(mappedAttributes, that.mappedAttributes);
     }
 }

@@ -48,6 +48,8 @@ import org.wso2.carbon.identity.application.mgt.ApplicationMgtSystemConfig;
 import org.wso2.carbon.identity.application.mgt.AuthorizedAPIManagementService;
 import org.wso2.carbon.identity.application.mgt.AuthorizedAPIManagementServiceImpl;
 import org.wso2.carbon.identity.application.mgt.DiscoverableApplicationManager;
+import org.wso2.carbon.identity.application.mgt.ai.LoginFlowAIManager;
+import org.wso2.carbon.identity.application.mgt.ai.LoginFlowAIManagerImpl;
 import org.wso2.carbon.identity.application.mgt.defaultsequence.DefaultAuthSeqMgtService;
 import org.wso2.carbon.identity.application.mgt.defaultsequence.DefaultAuthSeqMgtServiceImpl;
 import org.wso2.carbon.identity.application.mgt.inbound.protocol.ApplicationInboundAuthConfigHandler;
@@ -62,10 +64,12 @@ import org.wso2.carbon.identity.application.mgt.listener.AuthorizedAPIManagement
 import org.wso2.carbon.identity.application.mgt.listener.ConsoleAuthorizedAPIListener;
 import org.wso2.carbon.identity.application.mgt.listener.DefaultApplicationResourceMgtListener;
 import org.wso2.carbon.identity.application.mgt.listener.DefaultRoleManagementListener;
+import org.wso2.carbon.identity.application.mgt.listener.MyAccountAuthorizedAPIListener;
 import org.wso2.carbon.identity.application.mgt.provider.ApplicationPermissionProvider;
 import org.wso2.carbon.identity.application.mgt.provider.RegistryBasedApplicationPermissionProvider;
 import org.wso2.carbon.identity.application.mgt.validator.ApplicationValidator;
 import org.wso2.carbon.identity.application.mgt.validator.DefaultApplicationValidator;
+import org.wso2.carbon.identity.certificate.management.service.ApplicationCertificateManagementService;
 import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataManagementService;
 import org.wso2.carbon.identity.claim.metadata.mgt.listener.ClaimMetadataMgtListener;
 import org.wso2.carbon.identity.core.SAMLSSOServiceProviderManager;
@@ -142,6 +146,8 @@ public class ApplicationManagementServiceComponent {
             bundleContext.registerService(AuthorizedAPIManagementService.class,
                     new AuthorizedAPIManagementServiceImpl(), null);
 
+            bundleContext.registerService(LoginFlowAIManager.class, new LoginFlowAIManagerImpl(), null);
+
             bundleContext.registerService(RoleManagementListener.class, new DefaultRoleManagementListener(), null);
             bundleContext.registerService(ApplicationMgtListener.class, new DefaultRoleManagementListener(), null);
 
@@ -157,6 +163,8 @@ public class ApplicationManagementServiceComponent {
             bundleContext.registerService(RoleManagementListener.class, new AdminRoleListener(), null);
             // Register the Authorized API Management Listener.
             bundleContext.registerService(AuthorizedAPIManagementListener.class, new ConsoleAuthorizedAPIListener(),
+                    null);
+            bundleContext.registerService(AuthorizedAPIManagementListener.class, new MyAccountAuthorizedAPIListener(),
                     null);
 
             if (log.isDebugEnabled()) {
@@ -264,6 +272,9 @@ public class ApplicationManagementServiceComponent {
                         documentElement = new StAXOMBuilder(fileInputStream).getDocumentElement();
                         ServiceProvider sp = ServiceProvider.build(documentElement);
                         if (sp != null) {
+                            if (StringUtils.isBlank(sp.getApplicationVersion())) {
+                                sp.setApplicationVersion(ApplicationConstants.ApplicationVersion.BASE_APP_VERSION);
+                            }
                             fileBasedSPs.put(sp.getApplicationName(), sp);
                         }
                     }
@@ -631,5 +642,27 @@ public class ApplicationManagementServiceComponent {
     private void unsetSecretResolveManagerService(SecretResolveManager secretResolveManager) {
 
         ApplicationManagementServiceComponentHolder.getInstance().setSecretResolveManager(null);
+    }
+
+    @Reference(
+            name = "org.wso2.carbon.identity.certificate.management.service.ApplicationCertificateManagementService",
+            service = ApplicationCertificateManagementService.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetApplicationCertificateManagementService"
+    )
+    protected void setApplicationCertificateManagementService(ApplicationCertificateManagementService
+                                                                    applicationCertificateManagementService) {
+
+        ApplicationManagementServiceComponentHolder.getInstance()
+                .setApplicationCertificateMgtService(applicationCertificateManagementService);
+        log.debug("ApplicationCertificateManagementService set in ApplicationManagementServiceComponent bundle.");
+    }
+
+    protected void unsetApplicationCertificateManagementService(ApplicationCertificateManagementService
+                                                                      applicationCertificateManagementService) {
+
+        ApplicationManagementServiceComponentHolder.getInstance().setApplicationCertificateMgtService(null);
+        log.debug("ApplicationCertificateManagementService unset in ApplicationManagementServiceComponent bundle.");
     }
 }

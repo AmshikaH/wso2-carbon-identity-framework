@@ -3,7 +3,7 @@
         "image": "assets/images/logos/github.svg",
         "header": "GitHub",
         "Subheading": "Login users with existing GitHub accounts.",
-        "documentation": "{ ENV }/asgardeo/docs/guides/authentication/social-login/add-github-login/",
+        "documentation": "",
         "modal": {
             "form": {
                 "fields": [
@@ -65,7 +65,7 @@
                             "value": "redirect_uri"
                         }
                     ],
-                    "header": "Prerequites",
+                    "header": "Prerequisites",
                     "paragraphs": [
                         "Before you begin, create an <strong>OAuth application</strong> <a href=\"https://github.com/\" target=\"_blank\" rel=\"noopener noreferrer\">on GitHub</a>, and obtain a <strong>client ID & secret</strong>."
                     ],
@@ -105,7 +105,7 @@
             },
             {
                 "key": "scope",
-                "value": "user:email,read:user"
+                "value": "user:email read:user"
             },
             {
                 "key": "UsePrimaryEmail",

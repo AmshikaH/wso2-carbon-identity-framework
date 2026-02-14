@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, WSO2 LLC. (https://www.wso2.com).
+ * Copyright (c) 2023-2026, WSO2 LLC. (https://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -44,6 +44,8 @@ public class AuthServiceConstants {
     public static final String INTERNAL_ERROR_MSG_SEPARATOR = "-";
     public static final String AUTH_FAILURE_PARAM = "authFailure";
     public static final String AUTH_FAILURE_MSG_PARAM = "authFailureMsg";
+    public static final String PASSWORD_EXPIRED_PARAM = "passwordExpired";
+    public static final String PASSWORD_EXPIRED_MSG_PARAM = "passwordExpiredMsg";
     public static final String ERROR_CODE_PARAM = "errorCode";
     public static final String ERROR_CODE_PREFIX = "ABA-";
     public static final String REQ_ATTR_IS_INITIAL_API_BASED_AUTH_REQUEST = "isInitialAPIBasedAuthRequest";
@@ -74,7 +76,7 @@ public class AuthServiceConstants {
                 "Unable to find application for clientId %s in tenant domain %s"),
         ERROR_AUTHENTICATOR_NOT_SUPPORTED("60006",
                 "Authenticator not supported.",
-                "Configured authenticator %s is not supported."),
+                "The configured authenticator is not supported for app native authentication."),
         ERROR_API_BASED_AUTH_NOT_ENABLED("60007",
                 "App native authentication is not enabled for the application.",
                 "App native authentication is not enabled for this application with id %s"),
@@ -87,6 +89,12 @@ public class AuthServiceConstants {
         ERROR_INVALID_LOGOUT_REQUEST("60010",
                 "Invalid logout request.",
                 "Received logout request is invalid."),
+        ERROR_DISABLED_APPLICATION("60011",
+                "Application is disabled.",
+                "Application is disabled. Unable to proceed with authentication as application access " +
+                        "is restricted."),
+        ERROR_INVALID_AUTHENTICATOR("60012", "Invalid authenticator.",
+                "Requested authenticator is invalid."),
         // Server Error starting from 650xx.
         /* The 65001 ERROR_UNABLE_TO_PROCEED is used as the default server error
          therefor be cautious if that is being changed.*/

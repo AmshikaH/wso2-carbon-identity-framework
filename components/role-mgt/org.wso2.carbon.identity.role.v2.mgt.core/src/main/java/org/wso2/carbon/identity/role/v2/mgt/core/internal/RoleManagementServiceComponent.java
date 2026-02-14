@@ -29,11 +29,14 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
 import org.wso2.carbon.identity.api.resource.mgt.APIResourceManager;
+import org.wso2.carbon.identity.event.handler.AbstractEventHandler;
 import org.wso2.carbon.identity.event.services.IdentityEventService;
 import org.wso2.carbon.identity.organization.management.service.OrganizationManager;
 import org.wso2.carbon.identity.role.v2.mgt.core.RoleManagementService;
 import org.wso2.carbon.identity.role.v2.mgt.core.RoleManagementServiceImpl;
 import org.wso2.carbon.identity.role.v2.mgt.core.listener.RoleManagementListener;
+import org.wso2.carbon.identity.role.v2.mgt.core.listener.RoleManagementOrganizationHandler;
+import org.wso2.carbon.identity.role.v2.mgt.core.listener.RoleManagementV2AuditLogger;
 import org.wso2.carbon.idp.mgt.IdpManager;
 import org.wso2.carbon.user.core.service.RealmService;
 
@@ -52,6 +55,8 @@ public class RoleManagementServiceComponent {
         try {
             BundleContext bundleContext = context.getBundleContext();
             bundleContext.registerService(RoleManagementService.class, new RoleManagementServiceImpl(), null);
+            bundleContext.registerService(RoleManagementListener.class, new RoleManagementV2AuditLogger(), null);
+            bundleContext.registerService(AbstractEventHandler.class, new RoleManagementOrganizationHandler(), null);
 
             log.debug("Role V2 management service is activated.");
         } catch (Throwable e) {
@@ -165,6 +170,23 @@ public class RoleManagementServiceComponent {
     }
 
     protected void unsetRoleManagementListener(RoleManagementListener roleManagementListener) {
+
+        RoleManagementServiceComponentHolder.getInstance().setRoleManagementListenerList(null);
+    }
+
+    @Reference(
+            name = "role.management.audit.v2.logger",
+            service = RoleManagementV2AuditLogger.class,
+            cardinality = ReferenceCardinality.MULTIPLE,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetRoleManagementAuditV2Logger"
+    )
+    protected void setRoleManagementAuditV2Logger(RoleManagementV2AuditLogger roleManagementAuditV2Logger) {
+
+        RoleManagementServiceComponentHolder.getInstance().addRoleManagementListener(roleManagementAuditV2Logger);
+    }
+
+    protected void unsetRoleManagementAuditV2Logger(RoleManagementV2AuditLogger roleManagementListener) {
 
         RoleManagementServiceComponentHolder.getInstance().setRoleManagementListenerList(null);
     }

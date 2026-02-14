@@ -100,6 +100,13 @@ public class IdentityConstants {
     public final static String EVENT_LISTENER_PROPERTY = "Property";
     public final static String EVENT_LISTENER_PROPERTY_NAME = "name";
 
+    // My Account impersonation allowed resource configs.
+    public final static String MY_ACCOUNT = "MyAccount";
+    public final static String IMPERSONATION = "Impersonation";
+    public final static String ALLOWED_RESOURCES = "AllowedResources";
+    public final static String RESOURCE = "Resource";
+    public final static String CONTEXT = "context";
+
 
     // Cache Config constants
     public final static String CACHE_CONFIG = "CacheConfig";
@@ -147,6 +154,10 @@ public class IdentityConstants {
     public static final String UNKNOWN = "unknown";
     public static final String USER_IP = "user-ip";
 
+    // User-Agent header constants.
+    public static final String USER_AGENT = "User-Agent";
+    public static final String X_FORWARDED_USER_AGENT = "X-Forwarded-User-Agent";
+
     // Service provider constants
     public static final String SKIP_CONSENT_DISPLAY_NAME="Skip Consent";
     public static final String SKIP_CONSENT="skipConsent";
@@ -163,9 +174,12 @@ public class IdentityConstants {
 
     // User account association constants
     public static final String USER_ACCOUNT_ASSOCIATION_ENABLE_SHA256_KEY = "UserAccountAssociation.EnableSHA256Key";
+    public static final String FEDERATED_ASSOCIATION_MAX_BULK_OPERATIONS =
+            "FederatedUserAccountAssociation.MaxBulkOperations";
 
     public static final String IDENTITY_UTIL_ENABLE_SHA256 = "IdentityUtil.EnableSHA256";
     public static final String CERT_THUMBPRINT_ENABLE_SHA256 = "CertThumbprint.EnableSHA256";
+    public static final String ALLOW_LEGACY_ROLE_CLAIM_BEHAVIOUR = "AllowLegacyRoleClaimBehaviour";
 
     private IdentityConstants() {
     }
@@ -257,6 +271,8 @@ public class IdentityConstants {
         public static final String ACCEPT_OPENID_LOGIN = "SSOService.AcceptOpenIDLogin";
         public static final String SAML_RESPONSE_VALIDITY_PERIOD = "SSOService.SAMLResponseValidityPeriod";
         public static final String SAML2_ARTIFACT_VALIDITY_PERIOD = "SSOService.SAML2ArtifactValidityPeriodInMinutes";
+        public static final String SAML2_ARTIFACT_DOUBLE_ENCODING_DISABLED =
+                "SSOService.SAML2ArtifactDoubleEncodingDisabled";
         public static final String SSO_DEFAULT_SIGNING_ALGORITHM = "SSOService.SAMLDefaultSigningAlgorithmURI";
         public static final String SSO_DEFAULT_DIGEST_ALGORITHM = "SSOService.SAMLDefaultDigestAlgorithmURI";
         public static final String SSO_DEFAULT_ASSERTION_ENCRYPTION_ALGORITHM = "SSOService" +
@@ -277,12 +293,17 @@ public class IdentityConstants {
 
         //Identity Persistence Manager
         public static final String SKIP_DB_SCHEMA_CREATION = "JDBCPersistenceManager.SkipDBSchemaCreation";
+        public static final String SKIP_CLAIM_METADATA_PERSISTENCE = "JDBCPersistenceManager." +
+                "SkipClaimMetadataPersistence";
 
         //Timeout Configurations
         public static final String SESSION_IDLE_TIMEOUT = "TimeConfig.SessionIdleTimeout";
         public static final String REMEMBER_ME_TIME_OUT = "TimeConfig.RememberMeTimeout";
         public static final String EXTEND_REMEMBER_ME_SESSION_ON_AUTH =
                 "TimeConfig.ExtendRememberMeSessionTimeoutOnAuth";
+
+        public static final String PRESERVE_LOGGED_IN_SESSION_AT_PASSWORD_UPDATE =
+                "PasswordUpdate.PreserveLoggedInSession";
 
         public static final String CLEAN_UP_PERIOD = "JDBCPersistenceManager.SessionDataPersist.SessionDataCleanUp.CleanUpPeriod";
         public static final String CLEAN_UP_TIMEOUT = "JDBCPersistenceManager.SessionDataPersist.SessionDataCleanUp.CleanUpTimeout";
@@ -314,6 +335,8 @@ public class IdentityConstants {
         public static final String ENABLE_FEDERATED_USER_ASSOCIATION_DEFAULT = "false";
 
         public static final String ADAPTIVE_AUTH_ALLOW_LOOPS = "AdaptiveAuth.AllowLoops";
+
+        public static final String IDENTIFIER_AS_USERNAME = "LoginIdentifiers.enableIdentifierAsDisplayUsername";
     }
 
     /**
@@ -375,6 +398,21 @@ public class IdentityConstants {
         public static final String OAUTH2_DCR_EP_URL = "OAuth.OAuth2DCREPUrl";
         public static final String OAUTH2_JWKS_EP_URL = "OAuth.OAuth2JWKSPage";
         public static final String OIDC_DISCOVERY_EP_URL = "OAuth.OIDCDiscoveryEPUrl";
+        public static final String OAUTH1_REQUEST_TOKEN_URL_V2 = "OAuth.V2.OAuth1RequestTokenUrl";
+        public static final String OAUTH1_AUTHORIZE_URL_V2 = "OAuth.V2.OAuth1AuthorizeUrl";
+        public static final String OAUTH1_ACCESSTOKEN_URL_V2 = "OAuth.V2.OAuth1AccessTokenUrl";
+        public static final String OAUTH2_AUTHZ_EP_URL_V2 = "OAuth.V2.OAuth2AuthzEPUrl";
+        public static final String OAUTH2_PAR_EP_URL_V2 = "OAuth.V2.OAuth2ParEPUrl";
+        public static final String OAUTH2_TOKEN_EP_URL_V2 = "OAuth.V2.OAuth2TokenEPUrl";
+        public static final String OAUTH2_USERINFO_EP_URL_V2 = "OAuth.V2.OAuth2UserInfoEPUrl";
+        public static final String OAUTH2_REVOKE_EP_URL_V2 = "OAuth.V2.OAuth2RevokeEPUrl";
+        public static final String OAUTH2_INTROSPECT_EP_URL_V2 = "OAuth.V2.OAuth2IntrospectEPUrl";
+        public static final String OIDC_CHECK_SESSION_EP_URL_V2 = "OAuth.V2.OIDCCheckSessionEPUrl";
+        public static final String OIDC_LOGOUT_EP_URL_V2 = "OAuth.V2.OIDCLogoutEPUrl";
+        public static final String OIDC_WEB_FINGER_EP_URL_V2 = "OAuth.V2.OIDCWebFingerEPUrl";
+        public static final String OAUTH2_DCR_EP_URL_V2 = "OAuth.V2.OAuth2DCREPUrl";
+        public static final String OAUTH2_JWKS_EP_URL_V2 = "OAuth.V2.OAuth2JWKSPage";
+        public static final String OIDC_DISCOVERY_EP_URL_V2 = "OAuth.V2.OIDCDiscoveryEPUrl";
 
         public static final String REQUEST_TOKEN = "oauth/request-token";
         public static final String AUTHORIZE_URL = "oauth/authorize-url";
@@ -594,6 +632,9 @@ public class IdentityConstants {
         public static final String ROLE_NAME_CONFIG_ELEMENT = "Name";
         public static final String ROLE_MANDATORY_SCOPES_CONFIG_ELEMENT = "MandatoryScopes";
         public static final String ROLE_SCOPE_CONFIG_ELEMENT = "Scope";
+        public static final String API_RESOURCE_CONFIG_ELEMENT = "APIResource";
+        public static final String ROLE_MANDATORY_API_RESOURCES_CONFIG_ELEMENT = "MandatoryAPIResources";
+
     }
 
     /**

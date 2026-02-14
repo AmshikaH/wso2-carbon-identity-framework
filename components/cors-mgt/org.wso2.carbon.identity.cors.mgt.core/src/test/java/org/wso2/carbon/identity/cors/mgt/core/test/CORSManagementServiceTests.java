@@ -18,8 +18,7 @@
 
 package org.wso2.carbon.identity.cors.mgt.core.test;
 
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.testng.PowerMockTestCase;
+import org.mockito.MockedStatic;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -29,7 +28,6 @@ import org.wso2.carbon.identity.application.mgt.ApplicationManagementService;
 import org.wso2.carbon.identity.configuration.mgt.core.ConfigurationManager;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
-import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.identity.cors.mgt.core.CORSManagementService;
 import org.wso2.carbon.identity.cors.mgt.core.constant.SchemaConstants.CORSOriginTableColumns;
 import org.wso2.carbon.identity.cors.mgt.core.constant.TestConstants;
@@ -47,6 +45,10 @@ import org.wso2.carbon.identity.cors.mgt.core.model.CORSOrigin;
 import org.wso2.carbon.identity.cors.mgt.core.util.CarbonUtils;
 import org.wso2.carbon.identity.cors.mgt.core.util.ConfigurationManagementUtils;
 import org.wso2.carbon.identity.cors.mgt.core.util.DatabaseUtils;
+import org.wso2.carbon.identity.organization.management.service.OrganizationManager;
+import org.wso2.carbon.identity.organization.management.service.OrganizationManagerImpl;
+import org.wso2.carbon.identity.organization.resource.hierarchy.traverse.service.OrgResourceResolverService;
+import org.wso2.carbon.identity.organization.resource.hierarchy.traverse.service.exception.OrgResourceHierarchyTraverseException;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -57,6 +59,11 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
@@ -69,6 +76,7 @@ import static org.wso2.carbon.identity.cors.mgt.core.constant.SQLQueries.INSERT_
 import static org.wso2.carbon.identity.cors.mgt.core.constant.SQLQueries.INSERT_CORS_ORIGIN;
 import static org.wso2.carbon.identity.cors.mgt.core.constant.SchemaConstants.CORSOriginTableColumns.ID;
 import static org.wso2.carbon.identity.cors.mgt.core.constant.TestConstants.INSERT_APPLICATION;
+import static org.wso2.carbon.identity.cors.mgt.core.constant.TestConstants.SAMPLE_CORS_ORIGIN_LIST_1;
 import static org.wso2.carbon.identity.cors.mgt.core.constant.TestConstants.SAMPLE_ORIGIN_LIST_1;
 import static org.wso2.carbon.identity.cors.mgt.core.constant.TestConstants.SAMPLE_ORIGIN_LIST_2;
 import static org.wso2.carbon.identity.cors.mgt.core.internal.util.ErrorUtils.handleServerException;
@@ -76,17 +84,19 @@ import static org.wso2.carbon.identity.cors.mgt.core.internal.util.ErrorUtils.ha
 /**
  * Unit test cases for CORSService.
  */
-@PrepareForTest({PrivilegedCarbonContext.class,
-        IdentityDatabaseUtil.class,
-        IdentityUtil.class,
-        IdentityTenantUtil.class,
-        ApplicationManagementService.class})
-public class CORSManagementServiceTests extends PowerMockTestCase {
+public class CORSManagementServiceTests {
 
     private ConfigurationManager configurationManager;
     private Connection connection;
     private CORSManagementService corsManagementService;
     private CORSOriginDAO corsOriginDAO;
+
+    private MockedStatic<PrivilegedCarbonContext> privilegedCarbonContext;
+    private MockedStatic<IdentityTenantUtil> identityTenantUtil;
+    private MockedStatic<ApplicationManagementService> applicationManagementService;
+    private MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil;
+    private OrganizationManager organizationManager;
+    private OrgResourceResolverService orgResourceResolverService;
 
     @BeforeMethod
     public void setUp() throws Exception {
@@ -94,12 +104,18 @@ public class CORSManagementServiceTests extends PowerMockTestCase {
         DatabaseUtils.initiateH2Base();
 
         CarbonUtils.setCarbonHome();
-        CarbonUtils.mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME);
-        CarbonUtils.mockIdentityTenantUtility();
-        CarbonUtils.mockRealmService();
-        CarbonUtils.mockApplicationManagementService();
+        privilegedCarbonContext = mockStatic(PrivilegedCarbonContext.class);
+        identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+        applicationManagementService = mockStatic(ApplicationManagementService.class);
+        identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+        orgResourceResolverService = mock(OrgResourceResolverService.class);
 
-        connection = DatabaseUtils.createDataSource();
+        CarbonUtils.mockCarbonContextForTenant(SUPER_TENANT_ID, SUPER_TENANT_DOMAIN_NAME, privilegedCarbonContext);
+        CarbonUtils.mockIdentityTenantUtility(identityTenantUtil);
+        CarbonUtils.mockRealmService();
+        CarbonUtils.mockApplicationManagementService(applicationManagementService);
+
+        connection = DatabaseUtils.createDataSource(identityDatabaseUtil);
         configurationManager = ConfigurationManagementUtils.getConfigurationManager();
 
         corsManagementService = new CORSManagementServiceImpl();
@@ -108,6 +124,11 @@ public class CORSManagementServiceTests extends PowerMockTestCase {
         // Skip caches for testing.
         corsOriginDAO = new CORSOriginDAOImpl();
         CORSManagementServiceHolder.getInstance().setCorsOriginDAO(corsOriginDAO);
+
+        organizationManager = new OrganizationManagerImpl();
+        CORSManagementServiceHolder.getInstance().setOrganizationManager(organizationManager);
+
+        CORSManagementServiceHolder.getInstance().setOrgResourceResolverService(orgResourceResolverService);
     }
 
     @AfterMethod
@@ -115,18 +136,26 @@ public class CORSManagementServiceTests extends PowerMockTestCase {
 
         connection.close();
         DatabaseUtils.closeH2Base();
+        privilegedCarbonContext.close();
+        identityTenantUtil.close();
+        applicationManagementService.close();
+        identityDatabaseUtil.close();
     }
 
     @Test
-    public void testGetCORSOriginsWithNonExisting() throws CORSManagementServiceException {
+    public void testGetCORSOriginsWithNonExisting()
+            throws CORSManagementServiceException, OrgResourceHierarchyTraverseException {
 
+        when(orgResourceResolverService.getResourcesFromOrgHierarchy(anyString(), any(), any()))
+                .thenReturn(new ArrayList<CORSOrigin>());
         List<CORSOrigin> corsOrigins = corsManagementService.getTenantCORSOrigins(SUPER_TENANT_DOMAIN_NAME);
 
         assertTrue(corsOrigins.isEmpty());
     }
 
     @Test
-    public void testGetCORSOriginsWithSuperTenant() throws CORSManagementServiceException {
+    public void testGetCORSOriginsWithSuperTenant()
+            throws CORSManagementServiceException, OrgResourceHierarchyTraverseException {
 
         try (Connection connection = IdentityDatabaseUtil.getDBConnection(true)) {
             for (String origin : SAMPLE_ORIGIN_LIST_1) {
@@ -145,6 +174,8 @@ public class CORSManagementServiceTests extends PowerMockTestCase {
             throw handleServerException(ERROR_CODE_CORS_ADD, e, IdentityTenantUtil.getTenantDomain(SUPER_TENANT_ID));
         }
 
+        when(orgResourceResolverService.getResourcesFromOrgHierarchy(anyString(), any(), any()))
+                .thenReturn(SAMPLE_CORS_ORIGIN_LIST_1);
         List<String> retrievedOrigins = corsManagementService.getTenantCORSOrigins(SUPER_TENANT_DOMAIN_NAME)
                 .stream().map(CORSOrigin::getOrigin).collect(Collectors.toList());
 

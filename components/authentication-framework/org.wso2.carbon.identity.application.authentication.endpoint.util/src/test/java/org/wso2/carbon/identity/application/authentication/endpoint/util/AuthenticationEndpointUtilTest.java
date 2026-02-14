@@ -19,33 +19,30 @@ package org.wso2.carbon.identity.application.authentication.endpoint.util;
 import org.apache.axis2.context.ConfigurationContext;
 import org.apache.axis2.engine.AxisConfiguration;
 import org.mockito.Mock;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.mockito.MockedStatic;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
-import org.wso2.carbon.base.api.ServerConfigurationService;
-import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.endpoint.util.bean.UserDTO;
+import org.wso2.carbon.identity.application.authentication.framework.config.ConfigurationFacade;
 import org.wso2.carbon.identity.common.testng.WithAxisConfiguration;
 import org.wso2.carbon.identity.common.testng.WithCarbonHome;
-import org.wso2.carbon.identity.core.internal.IdentityCoreServiceComponent;
+import org.wso2.carbon.identity.core.internal.component.IdentityCoreServiceComponent;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.utils.ConfigurationContextService;
 
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.powermock.api.mockito.PowerMockito.mockStatic;
-import static org.powermock.api.mockito.PowerMockito.when;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
+import static org.mockito.MockitoAnnotations.initMocks;
 import static org.wso2.carbon.user.core.UserCoreConstants.DOMAIN_SEPARATOR;
 import static org.wso2.carbon.user.core.UserCoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME;
 import static org.wso2.carbon.user.core.UserCoreConstants.TENANT_DOMAIN_COMBINER;
 import static org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
 
-@PrepareForTest({IdentityUtil.class, IdentityCoreServiceComponent.class, IdentityTenantUtil.class})
-@PowerMockIgnore("org.mockito.*")
 @WithCarbonHome
 @WithAxisConfiguration
 public class AuthenticationEndpointUtilTest {
@@ -59,6 +56,9 @@ public class AuthenticationEndpointUtilTest {
     @Mock
     private AxisConfiguration mockAxisConfiguration;
 
+    @Mock
+    private ConfigurationFacade mockedConfigurationFacade;
+
     final String USERNAME = "TestUser";
     final String USERSTORE_NAME = "WSO2.COM";
     final String TENANT_DOMAIN = "abc.com";
@@ -70,6 +70,7 @@ public class AuthenticationEndpointUtilTest {
 
     @BeforeMethod
     public void setUp() throws Exception {
+        initMocks(this);
     }
 
     @AfterMethod
@@ -177,15 +178,16 @@ public class AuthenticationEndpointUtilTest {
                             String tenantDomain,
                             String userStoreDomain) throws Exception {
 
-        mockStatic(IdentityUtil.class);
-        when(IdentityUtil.getPrimaryDomainName()).thenReturn(PRIMARY_DEFAULT_DOMAIN_NAME);
-        when(IdentityUtil.extractDomainFromName(anyString())).thenCallRealMethod();
+        try (MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class)) {
+            identityUtil.when(IdentityUtil::getPrimaryDomainName).thenReturn(PRIMARY_DEFAULT_DOMAIN_NAME);
+            identityUtil.when(() -> IdentityUtil.extractDomainFromName(anyString())).thenCallRealMethod();
 
-        UserDTO userDTO = AuthenticationEndpointUtil.getUser(username);
-        Assert.assertNotNull(userDTO);
-        Assert.assertEquals(userDTO.getUsername(), USERNAME);
-        Assert.assertEquals(userDTO.getTenantDomain(), tenantDomain);
-        Assert.assertEquals(userDTO.getRealm(), userStoreDomain);
+            UserDTO userDTO = AuthenticationEndpointUtil.getUser(username);
+            Assert.assertNotNull(userDTO);
+            Assert.assertEquals(userDTO.getUsername(), USERNAME);
+            Assert.assertEquals(userDTO.getTenantDomain(), tenantDomain);
+            Assert.assertEquals(userDTO.getRealm(), userStoreDomain);
+        }
     }
 
     @DataProvider(name = "url-provider")
@@ -204,14 +206,68 @@ public class AuthenticationEndpointUtilTest {
 
     @Test(dataProvider = "url-provider")
     public void testIsValidURL(String urlString, boolean expectedValidity) throws Exception {
-        mockStatic(IdentityCoreServiceComponent.class);
-        when(IdentityCoreServiceComponent.getConfigurationContextService()).thenReturn(mockConfigurationContextService);
-        when(mockConfigurationContextService.getServerConfigContext()).thenReturn(mockConfigurationContext);
-        when(mockConfigurationContext.getAxisConfiguration()).thenReturn(mockAxisConfiguration);
 
-        mockStatic(IdentityTenantUtil.class);
-        when(IdentityTenantUtil.getTenantDomainFromContext()).thenReturn(TENANT_DOMAIN);
-        boolean validity = AuthenticationEndpointUtil.isValidURL(urlString);
-        Assert.assertEquals(validity, expectedValidity, "URL validity failed for " + urlString);
+        try (MockedStatic<IdentityCoreServiceComponent> identityCoreServiceComponent =
+                     mockStatic(IdentityCoreServiceComponent.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class)) {
+            identityCoreServiceComponent.when(
+                            IdentityCoreServiceComponent::getConfigurationContextService)
+                    .thenReturn(mockConfigurationContextService);
+            when(mockConfigurationContextService.getServerConfigContext()).thenReturn(mockConfigurationContext);
+            when(mockConfigurationContext.getAxisConfiguration()).thenReturn(mockAxisConfiguration);
+
+            identityTenantUtil.when(IdentityTenantUtil::getTenantDomainFromContext).thenReturn(TENANT_DOMAIN);
+            boolean validity = AuthenticationEndpointUtil.isValidURL(urlString);
+            Assert.assertEquals(validity, expectedValidity, "URL validity failed for " + urlString);
+        }
+    }
+
+    @DataProvider(name = "URLProvider")
+    public Object[][] isSafeURLData() {
+
+        return new Object[][]{
+                {"http://example.com", true},
+                {"http://example.com?query=string", true},
+                {"a.com/page", true},
+                {null, false},
+                {"null", false},
+                {"   ", false},
+                {"NULL", false},
+                {"javascript:alert(1)", false},
+                {"ftp://malicious.com/exploit", false},
+                {"FILE://C:/windows/system32/cmd.exe", false},
+                {"FTP://attacker.org/file.txt", false},
+                {"data:text/html,<script>alert('xss')</script>", false},
+                {"http://example.com/malicious?url=javascript:alert(1)", false},
+                {"somepath/ftp:user@host", false},
+                {"data:image/jpeg;base64,something.jpg", false}
+        };
+    }
+
+    @Test(dataProvider = "URLProvider")
+    public void testISchemeSafeURL(String url, boolean expectedValidity) throws Exception {
+
+        boolean validity = AuthenticationEndpointUtil.isSchemeSafeURL(url);
+        Assert.assertEquals(validity, expectedValidity);
+    }
+
+    @DataProvider
+    public Object[][] provideIsConsentPageRedirectParamsAllowed() {
+        return new Object[][]{
+                {true},
+                {false}
+        };
+    }
+
+    @Test(dataProvider = "provideIsConsentPageRedirectParamsAllowed")
+    public void testIsConsentPageRedirectParamsAllowed(boolean allowConsentPageRedirectParams) {
+
+        try (MockedStatic<ConfigurationFacade> configFacadeMock = mockStatic(ConfigurationFacade.class)) {
+            configFacadeMock.when(ConfigurationFacade::getInstance).thenReturn(mockedConfigurationFacade);
+            when(mockedConfigurationFacade.isConsentPageRedirectParamsAllowed())
+                    .thenReturn(allowConsentPageRedirectParams);
+            Assert.assertEquals(AuthenticationEndpointUtil.isConsentPageRedirectParamsAllowed(),
+                    allowConsentPageRedirectParams);
+        }
     }
 }

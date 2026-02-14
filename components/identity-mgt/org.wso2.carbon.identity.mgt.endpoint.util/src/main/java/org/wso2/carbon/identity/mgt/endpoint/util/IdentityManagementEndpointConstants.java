@@ -51,6 +51,7 @@ public class IdentityManagementEndpointConstants {
 
     public static final class PasswordRecoveryOptions {
         public static final String EMAIL = "EMAIL";
+        public static final String SMSOTP = "SMSOTP";
         public static final String SECURITY_QUESTIONS = "SECURITY_QUESTIONS";
     }
 
@@ -58,6 +59,7 @@ public class IdentityManagementEndpointConstants {
         public static final String FIRST_NAME_CLAIM = "http://wso2.org/claims/givenname";
         public static final String LAST_NAME_CLAIM = "http://wso2.org/claims/lastname";
         public static final String EMAIL_CLAIM = "http://wso2.org/claims/emailaddress";
+        public static final String MOBILE_CLAIM = "http://wso2.org/claims/mobile";
         public static final String CHALLENGE_QUESTION_URI_CLAIM = "http://wso2.org/claims/challengeQuestionUris";
         public static final String CHALLENGE_QUESTION_1_CLAIM = "http://wso2.org/claims/challengeQuestion1";
         public static final String CHALLENGE_QUESTION_2_CLAIM = "http://wso2.org/claims/challengeQuestion2";
@@ -73,6 +75,8 @@ public class IdentityManagementEndpointConstants {
         public static final String RECOVERY_API_V2_RELATIVE_PATH = "/api/users/v2/recovery";
         public static final String USER_API_RELATIVE_PATH = "/api/identity/user/v1.0";
         public static final String RECOVERY_CALLBACK_REGEX = "Recovery.CallbackRegex";
+        public static final String MOBILE_CLAIM_REGEX =  "^\\s*(?:\\+?(\\d{1,3}))?[\\-. (]*(\\d{2,3})[\\-. )]*" +
+                "(\\d{3})[\\-. ]*(\\d{4,6})(?: *x(\\d+))?\\s*$";
     }
 
     public static final class UserInfoRecoveryErrorDesc {
@@ -103,6 +107,7 @@ public class IdentityManagementEndpointConstants {
     public static final String My_ACCOUNT_APPLICATION_NAME = "My Account";
     public static final String CONSOLE_APPLICATION_NAME = "Console";
     public static final String USER_TENANT_HINT_PLACE_HOLDER = "${UserTenantHint}";
+    public static final String ORGANIZATION_ID_HINT_PLACE_HOLDER = "${organizationIdHint}";
 
     public static final String RELATIVE_PATH_START_CHAR = ".";
     public static final String SERVICE_CONFIG_RELATIVE_PATH =
@@ -122,6 +127,8 @@ public class IdentityManagementEndpointConstants {
     public static final String SERVICE_CONTEXT_PATH = "/services";
 
     public static final String ERROR_CODE_INVALID_TENANT = "60001";
+
+    public static final String PENDING_APPROVAL = "202 Accepted - The request has been received for processing";
 
     public static class Consent {
 

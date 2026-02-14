@@ -1,21 +1,27 @@
 /*
- * Copyright (c) 2016, WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ * Copyright (c) 2016-2025, WSO2 LLC. (http://www.wso2.com).
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
  * You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
 package org.wso2.carbon.identity.claim.metadata.mgt.util;
 
+import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.claim.metadata.mgt.dto.AttributeMappingDTO;
 import org.wso2.carbon.identity.claim.metadata.mgt.dto.ClaimDialectDTO;
 import org.wso2.carbon.identity.claim.metadata.mgt.dto.ClaimPropertyDTO;
@@ -26,24 +32,39 @@ import org.wso2.carbon.identity.claim.metadata.mgt.model.AttributeMapping;
 import org.wso2.carbon.identity.claim.metadata.mgt.model.ClaimDialect;
 import org.wso2.carbon.identity.claim.metadata.mgt.model.ExternalClaim;
 import org.wso2.carbon.identity.claim.metadata.mgt.model.LocalClaim;
+import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.user.api.UserRealm;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.claim.Claim;
+import org.wso2.carbon.user.core.claim.ClaimKey;
 import org.wso2.carbon.user.core.claim.ClaimMapping;
+import org.wso2.carbon.user.core.claim.inmemory.ClaimConfig;
 import org.wso2.carbon.user.core.service.RealmService;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import static org.wso2.carbon.identity.claim.metadata.mgt.util.ClaimConstants.COMMA_SEPARATOR;
+import static org.wso2.carbon.identity.claim.metadata.mgt.util.ClaimConstants.LOCAL_CLAIM_DIALECT_URI;
+import static org.wso2.carbon.identity.claim.metadata.mgt.util.ClaimConstants.UNIQUENESS_VALIDATION_SCOPE;
 
 /**
  * Utility class containing various claim metadata implementation related functionality.
  */
 public class ClaimMetadataUtils {
 
+    private static final Log log = LogFactory.getLog(ClaimMetadataUtils.class);
     public static final String CORRELATION_ID_MDC = "Correlation-ID";
+    private static final String IDENTITY_DATA_STORE_TYPE = "IdentityDataStore.DataStoreType";
+    private static final String DEFAULT_USER_STORE_BASED_IDENTITY_DATA_STORE =
+            "org.wso2.carbon.identity.governance.store.UserStoreBasedIdentityDataStore";
 
     private ClaimMetadataUtils() {
     }
@@ -264,6 +285,24 @@ public class ClaimMetadataUtils {
             }
         }
 
+        if (claimProperties.containsKey(ClaimConstants.MULTI_VALUED_PROPERTY)) {
+            claim.setMultiValued(Boolean.parseBoolean(claimProperties.get(ClaimConstants.MULTI_VALUED_PROPERTY)));
+        }
+
+        if (claimProperties.containsKey(ClaimConstants.MANAGED_IN_USER_STORE_PROPERTY)) {
+            claim.setManagedInUserStore(
+                    Boolean.parseBoolean(claimProperties.get(ClaimConstants.MANAGED_IN_USER_STORE_PROPERTY)));
+        } else {
+            claim.setManagedInUserStore(null);
+        }
+
+        if (claimProperties.containsKey(ClaimConstants.EXCLUDED_USER_STORES_PROPERTY)) {
+            String excludedUserStoresStr = claimProperties.get(ClaimConstants.EXCLUDED_USER_STORES_PROPERTY);
+            Set<String> excludedUserStores =
+                    new HashSet<>(Arrays.asList(StringUtils.split(excludedUserStoresStr, COMMA_SEPARATOR)));
+            claim.setExcludedUserStores(excludedUserStores);
+        }
+
         claimMapping.setClaim(claim);
 
         List<AttributeMapping> mappedAttributes = localClaim.getMappedAttributes();
@@ -317,5 +356,177 @@ public class ClaimMetadataUtils {
         claimMapping.getClaim().setDialectURI(externalClaim.getClaimDialectURI());
         claimMapping.getClaim().setClaimUri(externalClaim.getClaimURI());
         return claimMapping;
+    }
+
+    /**
+     * This method is used to build system default claims from claim config.
+     *
+     * @param claimConfig Claim Mapping
+     * @return Claim Dialect
+     */
+    public static Map<String, List<org.wso2.carbon.identity.claim.metadata.mgt.model.Claim>> getClaimsMapFromClaimConfig
+            (ClaimConfig claimConfig) {
+
+        Map<String, List<org.wso2.carbon.identity.claim.metadata.mgt.model.Claim>> claims = new HashMap<>();
+        if (claimConfig != null && MapUtils.isNotEmpty(claimConfig.getClaimMap())) {
+            for (Map.Entry<ClaimKey, ClaimMapping> entry : claimConfig.getClaimMap().entrySet()) {
+                ClaimKey claimKey = entry.getKey();
+                ClaimMapping claimMapping = entry.getValue();
+                String claimDialectURI = claimKey.getDialectUri();
+                org.wso2.carbon.identity.claim.metadata.mgt.model.Claim claim;
+
+                if (LOCAL_CLAIM_DIALECT_URI.equals(claimDialectURI)) {
+                    claim = createLocalClaim(claimKey, claimMapping,
+                            filterClaimProperties(claimConfig.getPropertyHolderMap().get(claimKey)));
+                    claims.computeIfAbsent(claimDialectURI, k -> new ArrayList<>()).add(claim);
+                } else {
+                    /*
+                     * If schemas.profile config is defined in the identity.xml, then attributes can be added to and
+                     * removed from the default schemas as defined in schemas.xml file.
+                     */
+                    Map<String, String> removalsMap = DialectConfigParser.getInstance().getRemovalsFromDefaultDialects();
+                    String removalDialect = removalsMap.get(claimKey.getClaimUri());
+                    if (removalDialect == null || !removalDialect.equals(claimKey.getDialectUri())) {
+                        claim = createExternalClaim(claimKey, claimConfig.getPropertyHolderMap().get(claimKey));
+                        claims.computeIfAbsent(claimDialectURI, k -> new ArrayList<>()).add(claim);
+                    }
+
+                    Map<String, String> additionsMap = DialectConfigParser.getInstance().getAdditionsToDefaultDialects();
+                    String newDialectUri = additionsMap.get(claimKey.getClaimUri());
+                    if (newDialectUri != null) {
+                        ClaimKey newClaimKey = new ClaimKey(claimKey.getClaimUri(), newDialectUri);
+                        Map<String, String> newClaimProperties = new HashMap<>(
+                                claimConfig.getPropertyHolderMap().computeIfAbsent(claimKey, k -> new HashMap<>())
+                        );
+                        newClaimProperties.put(ClaimConstants.DIALECT_PROPERTY, newDialectUri);
+                        claim = createExternalClaim(newClaimKey, newClaimProperties);
+                        claims.computeIfAbsent(newClaimKey.getDialectUri(), k -> new ArrayList<>()).add(claim);
+                    }
+                }
+            }
+        }
+        return claims;
+    }
+
+    public static Map<String, String> filterClaimProperties(Map<String, String> claimProperties) {
+
+        claimProperties.remove(ClaimConstants.DIALECT_PROPERTY);
+        claimProperties.remove(ClaimConstants.CLAIM_URI_PROPERTY);
+        claimProperties.remove(ClaimConstants.ATTRIBUTE_ID_PROPERTY);
+        claimProperties.remove(ClaimConstants.IS_SYSTEM_CLAIM);
+
+        claimProperties.putIfAbsent(ClaimConstants.DISPLAY_NAME_PROPERTY, "0");
+        claimProperties.computeIfPresent(ClaimConstants.SUPPORTED_BY_DEFAULT_PROPERTY,
+                (k, v) -> StringUtils.isBlank(v) ? "true" : v);
+        claimProperties.computeIfPresent(ClaimConstants.READ_ONLY_PROPERTY,
+                (k, v) -> StringUtils.isBlank(v) ? "true" : v);
+        claimProperties.computeIfPresent(ClaimConstants.REQUIRED_PROPERTY,
+                (k, v) -> StringUtils.isBlank(v) ? "true" : v);
+        return claimProperties;
+    }
+
+    private static LocalClaim createLocalClaim(ClaimKey claimKey, ClaimMapping claimMapping,
+                                               Map<String, String> claimProperties) {
+
+        String primaryDomainName = IdentityUtil.getPrimaryDomainName();
+        List<AttributeMapping> mappedAttributes = new ArrayList<>();
+        if (StringUtils.isNotBlank(claimMapping.getMappedAttribute())) {
+            mappedAttributes
+                    .add(new AttributeMapping(primaryDomainName, claimMapping.getMappedAttribute()));
+        }
+
+        if (claimMapping.getMappedAttributes() != null) {
+            for (Map.Entry<String, String> claimMappingEntry : claimMapping.getMappedAttributes()
+                    .entrySet()) {
+                mappedAttributes.add(new AttributeMapping(claimMappingEntry.getKey(),
+                        claimMappingEntry.getValue()));
+            }
+        }
+        return new LocalClaim(claimKey.getClaimUri(), mappedAttributes, claimProperties);
+    }
+
+    private static ExternalClaim createExternalClaim(ClaimKey claimKey, Map<String, String> claimProperties) {
+
+        String mappedLocalClaimURI = claimProperties.get(ClaimConstants.MAPPED_LOCAL_CLAIM_PROPERTY);
+        Map<String, String> filteredClaimProperties = filterClaimProperties(claimProperties);
+        return new ExternalClaim(claimKey.getDialectUri(), claimKey.getClaimUri(),
+                mappedLocalClaimURI, filteredClaimProperties);
+    }
+
+    /**
+     * Retrieves the server-level uniqueness validation scope for claims based on configuration.
+     *
+     * @return Enum value of ClaimConstants.ClaimUniquenessScope indicating the server-level uniqueness scope.
+     * Returns WITHIN_USERSTORE if the configuration is set to restrict uniqueness within the user store;
+     * otherwise, returns ACROSS_USERSTORES.
+     */
+    public static ClaimConstants.ClaimUniquenessScope getServerLevelClaimUniquenessScope() {
+
+        boolean isScopeWithinUserstore = Boolean.parseBoolean(IdentityUtil.getProperty(UNIQUENESS_VALIDATION_SCOPE));
+
+        return isScopeWithinUserstore ? ClaimConstants.ClaimUniquenessScope.WITHIN_USERSTORE :
+                ClaimConstants.ClaimUniquenessScope.ACROSS_USERSTORES;
+    }
+
+    /**
+     * Retrieves the allowed claim profiles.
+     *
+     * @return Set of allowed claim profiles.
+     */
+    public static Set<String> getAllowedClaimProfiles() {
+
+        Map<String, String> uniqueProfilesMap = new HashMap<>();
+        Arrays.stream(ClaimConstants.DefaultAllowedClaimProfile.values())
+                .map(ClaimConstants.DefaultAllowedClaimProfile::getProfileName)
+                .forEach(profile -> uniqueProfilesMap.put(profile.toLowerCase(), profile));
+
+        String serverWideClaimProfiles = IdentityUtil.getProperty(ClaimConstants.ALLOWED_ATTRIBUTE_PROFILE_CONFIG);
+        if (StringUtils.isNotBlank(serverWideClaimProfiles)) {
+            String[] profiles = serverWideClaimProfiles.split(",");
+            Arrays.stream(profiles).map(String::trim).filter(StringUtils::isNotBlank)
+                    .forEach(profile -> uniqueProfilesMap.putIfAbsent(profile.toLowerCase(), profile));
+        }
+
+        return Collections.unmodifiableSet(new HashSet<>(uniqueProfilesMap.values()));
+    }
+
+    /**
+     * Check whether the configured identity data store is user store based. Then all identity claim data will be
+     * stored in the user store.
+     *
+     * @return True if the configured identity data store is user store based. Else false.
+     */
+    public static boolean isUserStoreBasedIdentityDataStore() {
+
+        log.debug("Checking whether the configured identity data store is user store based.");
+        return StringUtils.equalsIgnoreCase(DEFAULT_USER_STORE_BASED_IDENTITY_DATA_STORE,
+                IdentityUtil.getProperty(IDENTITY_DATA_STORE_TYPE));
+    }
+
+    /**
+     * Check whether the given local claim is an identity claim.
+     *
+     * @param localClaim Local claim to be checked.
+     * @return True if the given local claim is an identity claim. Else false.
+     */
+    public static boolean isIdentityClaim(LocalClaim localClaim) {
+
+        if (log.isDebugEnabled()) {
+            log.debug(String.format("Checking whether the claim: %s is an identity claim.", localClaim.getClaimURI()));
+        }
+        return StringUtils.startsWith(localClaim.getClaimURI(),
+                UserCoreConstants.ClaimTypeURIs.IDENTITY_CLAIM_URI_PREFIX);
+    }
+
+    /**
+     * Check if a set contains a string in a case-insensitive manner.
+     *
+     * @param set    Set of strings to search.
+     * @param value  Value to find.
+     * @return True if the set contains the value (case-insensitive), false otherwise.
+     */
+    public static boolean containsIgnoreCase(Set<String> set, String value) {
+
+        return set.stream().anyMatch(item -> item.equalsIgnoreCase(value));
     }
 }

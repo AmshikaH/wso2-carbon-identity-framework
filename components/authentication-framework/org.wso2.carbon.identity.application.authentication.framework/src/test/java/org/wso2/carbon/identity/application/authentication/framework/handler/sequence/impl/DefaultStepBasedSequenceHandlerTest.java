@@ -19,16 +19,15 @@ package org.wso2.carbon.identity.application.authentication.framework.handler.se
 import org.apache.commons.lang.StringUtils;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.testng.IObjectFactory;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
-import org.testng.annotations.ObjectFactory;
 import org.testng.annotations.Test;
+import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.ApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticatorStateInfo;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.ApplicationConfig;
@@ -37,11 +36,14 @@ import org.wso2.carbon.identity.application.authentication.framework.config.mode
 import org.wso2.carbon.identity.application.authentication.framework.config.model.SequenceConfig;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.StepConfig;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
+import org.wso2.carbon.identity.application.authentication.framework.context.SessionContext;
 import org.wso2.carbon.identity.application.authentication.framework.exception.FrameworkException;
 import org.wso2.carbon.identity.application.authentication.framework.handler.claims.ClaimHandler;
 import org.wso2.carbon.identity.application.authentication.framework.handler.provisioning.ProvisioningHandler;
 import org.wso2.carbon.identity.application.authentication.framework.handler.step.StepHandler;
+import org.wso2.carbon.identity.application.authentication.framework.internal.FrameworkServiceDataHolder;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
+import org.wso2.carbon.identity.application.authentication.framework.model.ImpersonatedUser;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.authentication.framwork.test.utils.CommonTestUtils;
@@ -53,12 +55,21 @@ import org.wso2.carbon.identity.application.mgt.ApplicationConstants;
 import org.wso2.carbon.identity.application.mgt.ApplicationMgtSystemConfig;
 import org.wso2.carbon.identity.application.mgt.dao.ApplicationDAO;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
+import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataHandler;
+import org.wso2.carbon.identity.core.util.IdentityCoreConstants;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.user.api.RealmConfiguration;
+import org.wso2.carbon.user.core.UserCoreConstants;
+import org.wso2.carbon.user.core.UserRealm;
+import org.wso2.carbon.user.core.claim.ClaimManager;
+import org.wso2.carbon.user.core.common.AbstractUserStoreManager;
 import org.wso2.carbon.user.core.service.RealmService;
+import org.wso2.carbon.user.core.tenant.TenantManager;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -73,15 +84,17 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.initMocks;
-import static org.powermock.api.mockito.PowerMockito.doAnswer;
-import static org.powermock.api.mockito.PowerMockito.mockStatic;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
@@ -89,11 +102,12 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 import static org.wso2.carbon.base.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
+import static org.wso2.carbon.base.MultitenantConstants.SUPER_TENANT_ID;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ADD_USER_STORE_DOMAIN_TO_GROUPS_CLAIM;
 import static org.wso2.carbon.identity.core.util.IdentityUtil.getLocalGroupsClaimURI;
+import static org.wso2.carbon.user.core.UserCoreConstants.PRIMARY_DEFAULT_DOMAIN_NAME;
+import static org.wso2.carbon.user.core.UserCoreConstants.USER_STORE_GROUPS_CLAIM;
 
-@PrepareForTest({FrameworkUtils.class, IdentityApplicationManagementUtil.class, ApplicationMgtSystemConfig.class,
-        IdentityTenantUtil.class, IdentityUtil.class, LoggerUtils.class})
-@PowerMockIgnore("org.mockito.*")
 public class DefaultStepBasedSequenceHandlerTest {
 
     private static final String SUBJECT_CLAIM_URI_IN_APP_CONFIG = "subjectClaimUriFromAppConfig";
@@ -130,6 +144,12 @@ public class DefaultStepBasedSequenceHandlerTest {
     private RealmService mockRealmService;
 
     @Mock
+    private TenantManager mockTenantManager;
+
+    @Mock
+    private ClaimManager mockClaimManager;
+
+    @Mock
     private RealmConfiguration mockRealmConfiguration;
 
     private AuthenticationContext context;
@@ -138,12 +158,6 @@ public class DefaultStepBasedSequenceHandlerTest {
 
     private static final String FOO_TENANT = "foo.com";
     private static final String XY_USER_STORE_DOMAIN = "XY";
-
-    @ObjectFactory
-    public IObjectFactory getObjectFactory() {
-
-        return new org.powermock.modules.testng.PowerMockObjectFactory();
-    }
 
     @BeforeMethod
     public void setUp() throws Exception {
@@ -177,27 +191,35 @@ public class DefaultStepBasedSequenceHandlerTest {
                                                       String multiAttributeSeparator,
                                                       String expectedRoles) throws Exception {
 
-        Util.mockMultiAttributeSeparator(multiAttributeSeparator);
-        mockStatic(ApplicationMgtSystemConfig.class);
-        mockStatic(IdentityTenantUtil.class);
-        when(ApplicationMgtSystemConfig.getInstance()).thenReturn(applicationMgtSystemConfig);
-        when(applicationMgtSystemConfig.getApplicationDAO()).thenReturn(applicationDAO);
-        when(IdentityTenantUtil.getRealmService()).thenReturn(mockRealmService);
-        when(mockRealmService.getBootstrapRealmConfiguration()).thenReturn(mockRealmConfiguration);
-        SequenceConfig sequenceConfig = Util.mockSequenceConfig(spRoleMappings);
-        String mappedRoles = stepBasedSequenceHandler.getServiceProviderMappedUserRoles(sequenceConfig, localUserRoles);
-        assertEquals(mappedRoles, expectedRoles, "Service Provider Mapped Role do not have the expect value.");
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class);
+             MockedStatic<ApplicationMgtSystemConfig> applicationMgtSystemConfig =
+                     mockStatic(ApplicationMgtSystemConfig.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class)) {
+            frameworkUtils.when(FrameworkUtils::getMultiAttributeSeparator).thenReturn(multiAttributeSeparator);
+
+            applicationMgtSystemConfig.when(
+                    ApplicationMgtSystemConfig::getInstance).thenReturn(this.applicationMgtSystemConfig);
+            when(this.applicationMgtSystemConfig.getApplicationDAO()).thenReturn(applicationDAO);
+            identityTenantUtil.when(IdentityTenantUtil::getRealmService).thenReturn(mockRealmService);
+            when(mockRealmService.getBootstrapRealmConfiguration()).thenReturn(mockRealmConfiguration);
+            SequenceConfig sequenceConfig = Util.mockSequenceConfig(spRoleMappings);
+            String mappedRoles =
+                    stepBasedSequenceHandler.getServiceProviderMappedUserRoles(sequenceConfig, localUserRoles);
+            assertEquals(mappedRoles, expectedRoles, "Service Provider Mapped Role do not have the expect value.");
+        }
     }
 
     @DataProvider(name = "spRoleClaimUriProvider")
     private Object[][] getSpRoleClaimUriData() {
 
-        Util.mockIdentityUtil();
-        return new Object[][]{
-                {"SP_ROLE_CLAIM", "SP_ROLE_CLAIM"},
-                {null, getLocalGroupsClaimURI()},
-                {"", getLocalGroupsClaimURI()}
-        };
+        try (MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class)) {
+            identityUtil.when(IdentityUtil::getLocalGroupsClaimURI).thenReturn(UserCoreConstants.ROLE_CLAIM);
+            return new Object[][]{
+                    {"SP_ROLE_CLAIM", "SP_ROLE_CLAIM"},
+                    {null, getLocalGroupsClaimURI()},
+                    {"", getLocalGroupsClaimURI()}
+            };
+        }
     }
 
     /*
@@ -207,36 +229,40 @@ public class DefaultStepBasedSequenceHandlerTest {
     public void testGetSpRoleClaimUri(String spRoleClaimUri,
                                       String expectedRoleClaimUri) throws Exception {
 
-        Util.mockIdentityUtil();
-        ApplicationConfig appConfig = mock(ApplicationConfig.class);
-        when(appConfig.getRoleClaim()).thenReturn(spRoleClaimUri);
-        assertEquals(stepBasedSequenceHandler.getSpRoleClaimUri(appConfig), expectedRoleClaimUri);
+        try (MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class)) {
+            identityUtil.when(IdentityUtil::getLocalGroupsClaimURI).thenReturn(UserCoreConstants.ROLE_CLAIM);
+            ApplicationConfig appConfig = mock(ApplicationConfig.class);
+            when(appConfig.getRoleClaim()).thenReturn(spRoleClaimUri);
+            assertEquals(stepBasedSequenceHandler.getSpRoleClaimUri(appConfig), expectedRoleClaimUri);
+        }
     }
 
     @DataProvider(name = "spClaimMappingProvider")
     public Object[][] getSpClaimMappingProvider() {
 
-        Util.mockIdentityUtil();
-        return new Object[][]{
-                {       // SP mapped role claim
-                        new HashMap<String, String>() {{
-                            put("SP_ROLE_CLAIM", getLocalGroupsClaimURI());
-                        }},
-                        "SP_ROLE_CLAIM"
-                },
-                {       // Role claim not among SP mapped claims
-                        new HashMap<String, String>() {{
-                            put("SP_CLAIM", "LOCAL_CLAIM");
-                        }},
-                        getLocalGroupsClaimURI()
-                },
-                {      // No SP mapped claims
-                        new HashMap<>(), getLocalGroupsClaimURI()
-                },
-                {
-                        null, getLocalGroupsClaimURI()
-                }
-        };
+        try (MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class)) {
+            identityUtil.when(IdentityUtil::getLocalGroupsClaimURI).thenReturn(UserCoreConstants.ROLE_CLAIM);
+            return new Object[][]{
+                    {       // SP mapped role claim
+                            new HashMap<String, String>() {{
+                                put("SP_ROLE_CLAIM", getLocalGroupsClaimURI());
+                            }},
+                            "SP_ROLE_CLAIM"
+                    },
+                    {       // Role claim not among SP mapped claims
+                            new HashMap<String, String>() {{
+                                put("SP_CLAIM", "LOCAL_CLAIM");
+                            }},
+                            getLocalGroupsClaimURI()
+                    },
+                    {      // No SP mapped claims
+                            new HashMap<>(), getLocalGroupsClaimURI()
+                    },
+                    {
+                            null, getLocalGroupsClaimURI()
+                    }
+            };
+        }
     }
 
     /*
@@ -246,11 +272,13 @@ public class DefaultStepBasedSequenceHandlerTest {
     public void testGetSpRoleClaimUriSpMappedClaim(Map<String, String> claimMappings,
                                                    String expectedRoleClaim) throws Exception {
 
-        Util.mockIdentityUtil();
-        ApplicationConfig appConfig = mock(ApplicationConfig.class);
-        when(appConfig.getClaimMappings()).thenReturn(claimMappings);
-        String roleClaim = stepBasedSequenceHandler.getSpRoleClaimUri(appConfig);
-        assertEquals(roleClaim, expectedRoleClaim);
+        try (MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class)) {
+            identityUtil.when(IdentityUtil::getLocalGroupsClaimURI).thenReturn(UserCoreConstants.ROLE_CLAIM);
+            ApplicationConfig appConfig = mock(ApplicationConfig.class);
+            when(appConfig.getClaimMappings()).thenReturn(claimMappings);
+            String roleClaim = stepBasedSequenceHandler.getSpRoleClaimUri(appConfig);
+            assertEquals(roleClaim, expectedRoleClaim);
+        }
     }
 
     @DataProvider(name = "idpRoleClaimUriProvider")
@@ -266,70 +294,190 @@ public class DefaultStepBasedSequenceHandlerTest {
     @DataProvider(name = "idpClaimMappingProvider")
     public Object[][] getIdpClaimMappingsProvider() {
 
-        Util.mockIdentityUtil();
-        return new Object[][]{
-                {       // SP mapped role claim
-                        new ClaimMapping[]{
-                                ClaimMapping.build(getLocalGroupsClaimURI(), "IDP_ROLE_CLAIM", "", true)
-                        },
-                        "IDP_ROLE_CLAIM"
-                },
-                {       // Role claim not among SP mapped claims
-                        new ClaimMapping[]{
-                                ClaimMapping.build("LOCAL_CLAIM", "IDP_CLAIM", "", true)
-                        },
-                        null
-                },
-                {       // Role claim among claim mappings but remote claim is null
-                        new ClaimMapping[]{
-                                ClaimMapping.build(getLocalGroupsClaimURI(), null, null, true)
-                        },
-                        null
-                },
-                {      // No IDP mapped claims
-                        new ClaimMapping[0], null
-                },
-                {
-                        null, null
-                }
-        };
+        try (MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class)) {
+            identityUtil.when(IdentityUtil::getLocalGroupsClaimURI).thenReturn(UserCoreConstants.ROLE_CLAIM);
+            return new Object[][]{
+                    {       // SP mapped role claim
+                            new ClaimMapping[]{
+                                    ClaimMapping.build(getLocalGroupsClaimURI(), "IDP_ROLE_CLAIM", "", true)
+                            },
+                            "IDP_ROLE_CLAIM"
+                    },
+                    {       // Role claim not among SP mapped claims
+                            new ClaimMapping[]{
+                                    ClaimMapping.build("LOCAL_CLAIM", "IDP_CLAIM", "", true)
+                            },
+                            null
+                    },
+                    {       // Role claim among claim mappings but remote claim is null
+                            new ClaimMapping[]{
+                                    ClaimMapping.build(getLocalGroupsClaimURI(), null, null, true)
+                            },
+                            null
+                    },
+                    {      // No IDP mapped claims
+                            new ClaimMapping[0], null
+                    },
+                    {
+                            null, null
+                    }
+            };
+        }
     }
 
     @Test
     public void testHandleClaimMappings() throws Exception {
 
-        ClaimHandler claimHandler = Util.mockClaimHandler();
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getClaimHandler()).thenReturn(claimHandler);
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class)) {
+            ClaimHandler claimHandler = Util.mockClaimHandler();
+            frameworkUtils.when(FrameworkUtils::getClaimHandler).thenReturn(claimHandler);
 
-        Map<String, String> claims = stepBasedSequenceHandler.handleClaimMappings(
-                null,
-                new AuthenticationContext(),
-                new HashMap<>(),
-                false);
-        assertNotNull(claims);
+            Map<String, String> claims = stepBasedSequenceHandler.handleClaimMappings(
+                    null,
+                    new AuthenticationContext(),
+                    new HashMap<>(),
+                    false);
+            assertNotNull(claims);
+        }
     }
 
     @Test
     public void testHandleClaimMappingsFailed() throws Exception {
 
-        ClaimHandler claimHandler = mock(ClaimHandler.class);
-        doThrow(new FrameworkException("Claim Handling failed"))
-                .when(claimHandler)
-                .handleClaimMappings(any(StepConfig.class), any(AuthenticationContext.class),
-                        any(Map.class), anyBoolean());
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class)) {
+            ClaimHandler claimHandler = mock(ClaimHandler.class);
+            doThrow(new FrameworkException("Claim Handling failed"))
+                    .when(claimHandler)
+                    .handleClaimMappings(any(StepConfig.class), any(AuthenticationContext.class),
+                            any(Map.class), anyBoolean());
 
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getClaimHandler()).thenReturn(claimHandler);
+            frameworkUtils.when(FrameworkUtils::getClaimHandler).thenReturn(claimHandler);
 
-        Map<String, String> claims = stepBasedSequenceHandler.handleClaimMappings(
-                null,
-                new AuthenticationContext(),
-                new HashMap<>(),
-                false);
+            Map<String, String> claims = stepBasedSequenceHandler.handleClaimMappings(
+                    null,
+                    new AuthenticationContext(),
+                    new HashMap<>(),
+                    false);
 
-        assertNotNull(claims);
-        assertEquals(claims.size(), 0);
+            assertNotNull(claims);
+            assertEquals(claims.size(), 0);
+        }
+    }
+
+    /**
+     * Tests that user store domain is correctly appended to groups claim based on configuration.
+     * 
+     * This test verifies two scenarios:
+     * 1. When the configuration is disabled, the groups claim should not be modified.
+     * 2. When the configuration is enabled, the user store domain should be prepended to group names.
+     *
+     * @throws Exception If an error occurs during claim handling.
+     */
+    @Test
+    public void testAppendUserStoreDomainToGroupsClaim() throws Exception {
+
+        try (MockedStatic<LoggerUtils> loggerUtils = mockStatic(LoggerUtils.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<ClaimMetadataHandler> claimMetadataHandler = mockStatic(ClaimMetadataHandler.class);
+             MockedStatic<IdentityUtil> identityUtil = mockStatic(IdentityUtil.class);
+             MockedStatic<CarbonContext> carbonContext = mockStatic(CarbonContext.class)) {
+
+            // Constants for test.
+            final String testUserId = "12345";
+            final String secondaryUserStore = "SECONDARY";
+            final String groupsClaimValue = "role1,role2,role3";
+            final String commaSeparator = ",";
+
+            // Setup static mocks.
+            loggerUtils.when(LoggerUtils::isDiagnosticLogsEnabled).thenReturn(false);
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantId(SUPER_TENANT_DOMAIN_NAME))
+                    .thenReturn(SUPER_TENANT_ID);
+            identityUtil.when(IdentityUtil::isGroupsVsRolesSeparationImprovementsEnabled).thenReturn(true);
+            identityUtil.when(IdentityUtil::getPrimaryDomainName).thenReturn(PRIMARY_DEFAULT_DOMAIN_NAME);
+
+            // Setup authentication context and configs.
+            AuthenticationContext authenticationContext = mock(AuthenticationContext.class);
+            SequenceConfig sequenceConfig = mock(SequenceConfig.class);
+            ApplicationConfig applicationConfig = mock(ApplicationConfig.class);
+            StepConfig stepConfig = mock(StepConfig.class);
+            UserRealm userRealm = mock(UserRealm.class);
+
+            AuthenticatedUser authenticatedUser = new AuthenticatedUser();
+            authenticatedUser.setTenantDomain(SUPER_TENANT_DOMAIN_NAME);
+            authenticatedUser.setUserId(testUserId);
+            authenticatedUser.setUserStoreDomain(secondaryUserStore);
+
+            when(authenticationContext.getSequenceConfig()).thenReturn(sequenceConfig);
+            when(authenticationContext.getTenantDomain()).thenReturn(SUPER_TENANT_DOMAIN_NAME);
+            when(authenticationContext.getLastAuthenticatedUser()).thenReturn(authenticatedUser);
+            when(sequenceConfig.getApplicationConfig()).thenReturn(applicationConfig);
+            when(stepConfig.getAuthenticatedUser()).thenReturn(authenticatedUser);
+
+            Map<String, String> claimMap = new HashMap<>();
+            claimMap.put(USER_STORE_GROUPS_CLAIM, USER_STORE_GROUPS_CLAIM);
+            when(applicationConfig.getRequestedClaimMappings()).thenReturn(claimMap);
+
+            // Setup realm service and user store manager.
+            FrameworkServiceDataHolder.getInstance().setRealmService(mockRealmService);
+            when(mockRealmService.getTenantManager()).thenReturn(mockTenantManager);
+            when(mockTenantManager.getTenantId(SUPER_TENANT_DOMAIN_NAME)).thenReturn(SUPER_TENANT_ID);
+            when(mockRealmService.getTenantUserRealm(SUPER_TENANT_ID)).thenReturn(userRealm);
+            when(userRealm.getClaimManager()).thenReturn(mockClaimManager);
+
+            AbstractUserStoreManager mockAbstractUserStoreManager = mock(AbstractUserStoreManager.class);
+            when(userRealm.getUserStoreManager()).thenReturn(mockAbstractUserStoreManager);
+
+            Map<String, String> claimValues = new HashMap<>();
+            claimValues.put(USER_STORE_GROUPS_CLAIM, groupsClaimValue);
+            doReturn(claimValues).when(mockAbstractUserStoreManager).getUserClaimValuesWithID(anyString(),
+                    any(String[].class), nullable(String.class));
+
+            when(mockAbstractUserStoreManager.getSecondaryUserStoreManager(anyString()))
+                    .thenReturn(mockAbstractUserStoreManager);
+            when(mockAbstractUserStoreManager.getRealmConfiguration()).thenReturn(mockRealmConfiguration);
+            when(mockRealmConfiguration.getUserStoreProperty(IdentityCoreConstants.MULTI_ATTRIBUTE_SEPARATOR))
+                    .thenReturn(commaSeparator);
+
+            org.wso2.carbon.user.api.ClaimMapping[] claimMappings = new org.wso2.carbon.user.api.ClaimMapping[0];
+            when(mockClaimManager.getAllClaimMappings(ApplicationConstants.LOCAL_IDP_DEFAULT_CLAIM_DIALECT))
+                    .thenReturn(claimMappings);
+
+            ClaimMetadataHandler mockClaimMetadataHandlerInstance = mock(ClaimMetadataHandler.class);
+            claimMetadataHandler.when(ClaimMetadataHandler::getInstance).thenReturn(mockClaimMetadataHandlerInstance);
+            when(mockClaimMetadataHandlerInstance.getMappingsMapFromOtherDialectToCarbon(
+                    anyString(), any(), anyString(), anyBoolean())).thenReturn(claimMap);
+
+            // Test scenario 1: Configuration is disabled, groups claim should not be modified.
+            Map<String, String> claimsWithoutAppending = stepBasedSequenceHandler.handleClaimMappings(
+                    stepConfig,
+                    authenticationContext,
+                    new HashMap<>(),
+                    false);
+            assertNotNull(claimsWithoutAppending, "Claims map should not be null.");
+            assertNotNull(claimsWithoutAppending.get(USER_STORE_GROUPS_CLAIM),
+                    "Groups claim should be present in the claims map.");
+            assertFalse(claimsWithoutAppending.get(USER_STORE_GROUPS_CLAIM).contains(secondaryUserStore + "/"),
+                    "User store domain should not be appended to groups when configuration is disabled.");
+
+            // Setup for scenario 2.
+            CarbonContext mockCarbonContext = mock(CarbonContext.class);
+            carbonContext.when(CarbonContext::getThreadLocalCarbonContext).thenReturn(mockCarbonContext);
+            when(mockCarbonContext.getUserRealm()).thenReturn(userRealm);
+
+            // Test scenario 2: Configuration is enabled, groups claim should be modified.
+            identityUtil.when(() -> IdentityUtil.getProperty(ADD_USER_STORE_DOMAIN_TO_GROUPS_CLAIM))
+                    .thenReturn("true");
+            Map<String, String> claimsWithAppending = stepBasedSequenceHandler.handleClaimMappings(
+                    stepConfig,
+                    authenticationContext,
+                    new HashMap<>(),
+                    false);
+            assertNotNull(claimsWithAppending, "Claims map should not be null.");
+            assertNotNull(claimsWithAppending.get(USER_STORE_GROUPS_CLAIM),
+                    "Groups claim should be present in the claims map.");
+            assertTrue(claimsWithAppending.get(USER_STORE_GROUPS_CLAIM).contains(secondaryUserStore + "/"),
+                    "User store domain should be appended to groups when configuration is enabled.");
+        }
     }
 
     @DataProvider(name = "idpMappedUserRoleDataProvider")
@@ -497,43 +645,44 @@ public class DefaultStepBasedSequenceHandlerTest {
                                           Map<String, String> externalAttributeValues,
                                           String expectedUserStoreToBeProvisioned) throws Exception {
 
-        context = getMockedContextForJitProvisioning(provisioningUserStoreId, provisioningUserStoreClaimUri,
-                TENANT_DOMAIN);
+        try (MockedStatic<IdentityApplicationManagementUtil> identityApplicationManagementUtil =
+                mockStatic(IdentityApplicationManagementUtil.class);
+             MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class);) {
+            context = getMockedContextForJitProvisioning(provisioningUserStoreId, provisioningUserStoreClaimUri,
+                    TENANT_DOMAIN);
 
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
-        // Mock the provisioning handler
-        ProvisioningHandler provisioningHandler = mock(ProvisioningHandler.class);
-        doNothing().when(provisioningHandler)
-                .handle(anyList(), anyString(), anyMap(), captor.capture(), anyString());
+            // Mock the provisioning handler
+            ProvisioningHandler provisioningHandler = mock(ProvisioningHandler.class);
+            doNothing().when(provisioningHandler)
+                    .handle(anyList(), anyString(), anyMap(), captor.capture(), anyString());
 
-        // Mock framework util to returned mocked provisoning handler
-        returnMockProvisioningHandler(provisioningHandler);
-        mockHandlerThreadLocalProvisioningServiceProvider();
 
-        stepBasedSequenceHandler
-                .handleJitProvisioning(subjectIdentifier, context, mappedRoles, externalAttributeValues);
-        verify(provisioningHandler).handle(anyList(), anyString(), anyMap(), captor.capture(), anyString());
+            frameworkUtils.when(FrameworkUtils::getProvisioningHandler).thenReturn(provisioningHandler);
 
-        // check whether the user is provisioned to correct user store
-        assertEquals(captor.getValue(), expectedUserStoreToBeProvisioned);
-        assertNotNull(threadLocalProvisioningSp);
-        assertTrue(threadLocalProvisioningSp.isJustInTimeProvisioning());
-        assertEquals(threadLocalProvisioningSp.getTenantDomain(), TENANT_DOMAIN);
-        assertEquals(threadLocalProvisioningSp.getClaimDialect(), ApplicationConstants.LOCAL_IDP_DEFAULT_CLAIM_DIALECT);
-    }
+            identityApplicationManagementUtil.when(
+                    () -> IdentityApplicationManagementUtil.setThreadLocalProvisioningServiceProvider(
+                            any(ThreadLocalProvisioningServiceProvider.class))).thenAnswer(new Answer<Object>() {
+                public Object answer(InvocationOnMock invocation) throws Throwable {
 
-    private void mockHandlerThreadLocalProvisioningServiceProvider() throws Exception {
+                    threadLocalProvisioningSp = (ThreadLocalProvisioningServiceProvider) invocation.getArguments()[0];
+                    return null;
+                }
+            });
 
-        mockStatic(IdentityApplicationManagementUtil.class);
+            stepBasedSequenceHandler
+                    .handleJitProvisioning(subjectIdentifier, context, mappedRoles, externalAttributeValues);
+            verify(provisioningHandler).handle(anyList(), anyString(), anyMap(), captor.capture(), anyString());
 
-        doAnswer(new Answer<Object>() {
-            public Object answer(InvocationOnMock invocation) throws Throwable {
-                threadLocalProvisioningSp = (ThreadLocalProvisioningServiceProvider) invocation.getArguments()[0];
-                return null;
-            }
-        }).when(IdentityApplicationManagementUtil.class, "setThreadLocalProvisioningServiceProvider",
-                any(ThreadLocalProvisioningServiceProvider.class));
+            // check whether the user is provisioned to correct user store
+            assertEquals(captor.getValue(), expectedUserStoreToBeProvisioned);
+            assertNotNull(threadLocalProvisioningSp);
+            assertTrue(threadLocalProvisioningSp.isJustInTimeProvisioning());
+            assertEquals(threadLocalProvisioningSp.getTenantDomain(), TENANT_DOMAIN);
+            assertEquals(threadLocalProvisioningSp.getClaimDialect(),
+                    ApplicationConstants.LOCAL_IDP_DEFAULT_CLAIM_DIALECT);
+        }
     }
 
     private AuthenticationContext getMockedContextForJitProvisioning(String provisioningUserStoreId,
@@ -560,31 +709,26 @@ public class DefaultStepBasedSequenceHandlerTest {
     @Test
     public void testHandleJitProvisioningFailure() throws Exception {
 
-        final String subjectIdentifier = "subjectID";
-        final List<String> mappedRoles = Collections.emptyList();
-        Map<String, String> externalAttributeValues = Collections.emptyMap();
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class)) {
+            final String subjectIdentifier = "subjectID";
+            final List<String> mappedRoles = Collections.emptyList();
+            Map<String, String> externalAttributeValues = Collections.emptyMap();
 
-        context = getMockedContextForJitProvisioning(null, null, null);
-        // Mock the provisioning handler
-        ProvisioningHandler provisioningHandler = mock(ProvisioningHandler.class);
-        doThrow(new FrameworkException("Provisioning Failed")).when(provisioningHandler)
-                .handle(anyList(), anyString(), anyMap(), anyString(), anyString());
+            context = getMockedContextForJitProvisioning(null, null, null);
+            // Mock the provisioning handler
+            ProvisioningHandler provisioningHandler = mock(ProvisioningHandler.class);
+            doThrow(new FrameworkException("Provisioning Failed")).when(provisioningHandler)
+                    .handle(anyList(), anyString(), anyMap(), anyString(), anyString());
 
-        returnMockProvisioningHandler(provisioningHandler);
+            frameworkUtils.when(FrameworkUtils::getProvisioningHandler).thenReturn(provisioningHandler);
 
-        try {
-            stepBasedSequenceHandler
-                    .handleJitProvisioning(subjectIdentifier, context, mappedRoles, externalAttributeValues);
-        } catch (FrameworkException ex) {
-            fail("Possible API change. This method did not throw any exception to outside before.");
+            try {
+                stepBasedSequenceHandler
+                        .handleJitProvisioning(subjectIdentifier, context, mappedRoles, externalAttributeValues);
+            } catch (FrameworkException ex) {
+                fail("Possible API change. This method did not throw any exception to outside before.");
+            }
         }
-    }
-
-    private void returnMockProvisioningHandler(ProvisioningHandler mockProvisioningHandler) throws FrameworkException {
-        
-        // Mock framework util to returned mocked provisioning handler
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getProvisioningHandler()).thenReturn(mockProvisioningHandler);
     }
 
     /**
@@ -593,47 +737,49 @@ public class DefaultStepBasedSequenceHandlerTest {
     @Test
     public void testHandleSingleStep() throws Exception {
 
-        // mock the step handler
-        StepHandler stepHandler = getMockedStepHandlerForIncompleteStep(true);
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class);
+             MockedStatic<LoggerUtils> loggerUtils = mockStatic(LoggerUtils.class)) {
+            // mock the step handler
+            StepHandler stepHandler = getMockedStepHandlerForIncompleteStep(true);
 
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getStepHandler()).thenReturn(stepHandler);
+            frameworkUtils.when(FrameworkUtils::getStepHandler).thenReturn(stepHandler);
 
-        mockStatic(LoggerUtils.class);
-        when(LoggerUtils.isDiagnosticLogsEnabled()).thenReturn(false);
+            loggerUtils.when(LoggerUtils::isDiagnosticLogsEnabled).thenReturn(false);
 
-        StepConfig stepConfig = new StepConfig();
-        SequenceConfig sequenceConfig = new SequenceConfig();
-        sequenceConfig.getStepMap().put(1, stepConfig);
-        context.setSequenceConfig(sequenceConfig);
+            StepConfig stepConfig = new StepConfig();
+            SequenceConfig sequenceConfig = new SequenceConfig();
+            sequenceConfig.getStepMap().put(1, stepConfig);
+            context.setSequenceConfig(sequenceConfig);
 
-        stepBasedSequenceHandler.handle(request, response, context);
-        assertFalse(context.getSequenceConfig().isCompleted());
-        assertTrue(context.isRequestAuthenticated());
+            stepBasedSequenceHandler.handle(request, response, context);
+            assertFalse(context.getSequenceConfig().isCompleted());
+            assertTrue(context.isRequestAuthenticated());
+        }
     }
 
     @Test
     public void testHandleSingleStepFinish() throws Exception {
 
-        // mock the step handler
-        StepHandler stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getStepHandler()).thenReturn(stepHandler);
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class);
+             MockedStatic<LoggerUtils> loggerUtils = mockStatic(LoggerUtils.class)) {
+            // mock the step handler
+            StepHandler stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
+            frameworkUtils.when(FrameworkUtils::getStepHandler).thenReturn(stepHandler);
 
-        mockStatic(LoggerUtils.class);
-        when(LoggerUtils.isDiagnosticLogsEnabled()).thenReturn(false);
+            loggerUtils.when(LoggerUtils::isDiagnosticLogsEnabled).thenReturn(false);
 
-        StepConfig stepConfig = new StepConfig();
-        SequenceConfig sequenceConfig = new SequenceConfig();
-        sequenceConfig.getStepMap().put(1, stepConfig);
-        context.setSequenceConfig(sequenceConfig);
+            StepConfig stepConfig = new StepConfig();
+            SequenceConfig sequenceConfig = new SequenceConfig();
+            sequenceConfig.getStepMap().put(1, stepConfig);
+            context.setSequenceConfig(sequenceConfig);
 
-        doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(request, response, context);
-        stepBasedSequenceHandler.handle(request, response, context);
+            doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(request, response, context);
+            stepBasedSequenceHandler.handle(request, response, context);
 
-        assertTrue(context.getSequenceConfig().isCompleted());
-        assertTrue(context.isRequestAuthenticated());
-        assertResetContext(context);
+            assertTrue(context.getSequenceConfig().isCompleted());
+            assertTrue(context.isRequestAuthenticated());
+            assertResetContext(context);
+        }
     }
 
     private StepHandler getMockedStepHandlerForSuccessfulRequestAuthentication() throws Exception {
@@ -692,78 +838,80 @@ public class DefaultStepBasedSequenceHandlerTest {
     public void testHandleLastStep(boolean isRequestAuthenticated,
                                    boolean isOverallAuthenticationSucceeded) throws Exception {
 
-        StepHandler stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getStepHandler()).thenReturn(stepHandler);
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class)) {
+            StepHandler stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
+            frameworkUtils.when(FrameworkUtils::getStepHandler).thenReturn(stepHandler);
 
-        StepConfig firstStep = new StepConfig();
-        firstStep.setOrder(1);
+            StepConfig firstStep = new StepConfig();
+            firstStep.setOrder(1);
 
-        // Second step is completed.
-        StepConfig lastStep = new StepConfig();
-        lastStep.setOrder(2);
-        lastStep.setCompleted(true);
+            // Second step is completed.
+            StepConfig lastStep = new StepConfig();
+            lastStep.setOrder(2);
+            lastStep.setCompleted(true);
 
-        SequenceConfig sequenceConfig = new SequenceConfig();
-        sequenceConfig.getStepMap().put(1, firstStep);
-        sequenceConfig.getStepMap().put(2, lastStep);
+            SequenceConfig sequenceConfig = new SequenceConfig();
+            sequenceConfig.getStepMap().put(1, firstStep);
+            sequenceConfig.getStepMap().put(2, lastStep);
 
-        doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(any(HttpServletRequest.class), any
-                (HttpServletResponse.class), any(AuthenticationContext.class));
+            doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(any(HttpServletRequest.class), any
+                    (HttpServletResponse.class), any(AuthenticationContext.class));
 
-        // currently we have completed second step
-        context.setCurrentStep(2);
-        context.setSequenceConfig(sequenceConfig);
-        context.setRequestAuthenticated(isRequestAuthenticated);
+            // currently we have completed second step
+            context.setCurrentStep(2);
+            context.setSequenceConfig(sequenceConfig);
+            context.setRequestAuthenticated(isRequestAuthenticated);
 
-        stepBasedSequenceHandler.handle(request, response, context);
-        assertResetContext(context);
-        assertEquals(context.isRequestAuthenticated(), isOverallAuthenticationSucceeded);
-        assertTrue(context.getSequenceConfig().isCompleted());
+            stepBasedSequenceHandler.handle(request, response, context);
+            assertResetContext(context);
+            assertEquals(context.isRequestAuthenticated(), isOverallAuthenticationSucceeded);
+            assertTrue(context.getSequenceConfig().isCompleted());
+        }
     }
 
     @Test
     public void testHandleMultiOptionStep() throws Exception {
 
-        StepHandler stepHandler = getMockedStepHandlerForIncompleteStep(true);
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getStepHandler()).thenReturn(stepHandler);
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class)) {
+            StepHandler stepHandler = getMockedStepHandlerForIncompleteStep(true);
+            frameworkUtils.when(FrameworkUtils::getStepHandler).thenReturn(stepHandler);
 
-        StepConfig firstStep = new StepConfig();
-        firstStep.setOrder(1);
+            StepConfig firstStep = new StepConfig();
+            firstStep.setOrder(1);
 
-        // Second step is completed.
-        StepConfig lastStep = new StepConfig();
-        lastStep.setMultiOption(true);
-        lastStep.setOrder(2);
-        lastStep.setCompleted(true);
+            // Second step is completed.
+            StepConfig lastStep = new StepConfig();
+            lastStep.setMultiOption(true);
+            lastStep.setOrder(2);
+            lastStep.setCompleted(true);
 
-        SequenceConfig sequenceConfig = new SequenceConfig();
-        sequenceConfig.getStepMap().put(1, firstStep);
-        sequenceConfig.getStepMap().put(2, lastStep);
+            SequenceConfig sequenceConfig = new SequenceConfig();
+            sequenceConfig.getStepMap().put(1, firstStep);
+            sequenceConfig.getStepMap().put(2, lastStep);
 
-        doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(any(HttpServletRequest.class), any
-                (HttpServletResponse.class), any(AuthenticationContext.class));
+            doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(any(HttpServletRequest.class), any
+                    (HttpServletResponse.class), any(AuthenticationContext.class));
 
-        // currently we have completed second step
-        context.setCurrentStep(2);
-        context.setSequenceConfig(sequenceConfig);
-        context.setRequestAuthenticated(false);
+            // currently we have completed second step
+            context.setCurrentStep(2);
+            context.setSequenceConfig(sequenceConfig);
+            context.setRequestAuthenticated(false);
 
-        stepBasedSequenceHandler.handle(request, response, context);
-        assertResetContext(context);
-        // Assert whether the sequence is retrying the step
-        assertTrue(context.getSequenceConfig().getStepMap().get(context.getCurrentStep()).isRetrying());
-        // Assert whether before retrying the context request authentication status was set to true.
-        assertTrue(context.isRequestAuthenticated());
+            stepBasedSequenceHandler.handle(request, response, context);
+            assertResetContext(context);
+            // Assert whether the sequence is retrying the step
+            assertTrue(context.getSequenceConfig().getStepMap().get(context.getCurrentStep()).isRetrying());
+            // Assert whether before retrying the context request authentication status was set to true.
+            assertTrue(context.isRequestAuthenticated());
 
-        // step handler completes the step successfully
-        stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
-        when(FrameworkUtils.getStepHandler()).thenReturn(stepHandler);
+            // step handler completes the step successfully
+            stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
+            frameworkUtils.when(FrameworkUtils::getStepHandler).thenReturn(stepHandler);
 
-        stepBasedSequenceHandler.handle(request, response, context);
-        assertTrue(context.getSequenceConfig().isCompleted());
-        assertTrue(context.isRequestAuthenticated());
+            stepBasedSequenceHandler.handle(request, response, context);
+            assertTrue(context.getSequenceConfig().isCompleted());
+            assertTrue(context.isRequestAuthenticated());
+        }
     }
 
     /*
@@ -772,36 +920,37 @@ public class DefaultStepBasedSequenceHandlerTest {
     @Test
     public void testHandlePassiveAuthenticateWhenMultiOptionStep() throws Exception {
 
-        StepHandler stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
-        mockStatic(FrameworkUtils.class);
-        when(FrameworkUtils.getStepHandler()).thenReturn(stepHandler);
+        try (MockedStatic<FrameworkUtils> frameworkUtils = mockStatic(FrameworkUtils.class)) {
+            StepHandler stepHandler = getMockedStepHandlerForSuccessfulRequestAuthentication();
+            frameworkUtils.when(FrameworkUtils::getStepHandler).thenReturn(stepHandler);
 
-        StepConfig firstStep = new StepConfig();
-        firstStep.setOrder(1);
+            StepConfig firstStep = new StepConfig();
+            firstStep.setOrder(1);
 
-        // Second step is completed.
-        StepConfig lastStep = new StepConfig();
-        lastStep.setMultiOption(true);
-        lastStep.setOrder(2);
-        lastStep.setCompleted(true);
+            // Second step is completed.
+            StepConfig lastStep = new StepConfig();
+            lastStep.setMultiOption(true);
+            lastStep.setOrder(2);
+            lastStep.setCompleted(true);
 
-        SequenceConfig sequenceConfig = new SequenceConfig();
-        sequenceConfig.getStepMap().put(1, firstStep);
-        sequenceConfig.getStepMap().put(2, lastStep);
+            SequenceConfig sequenceConfig = new SequenceConfig();
+            sequenceConfig.getStepMap().put(1, firstStep);
+            sequenceConfig.getStepMap().put(2, lastStep);
 
-        doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(any(HttpServletRequest.class), any
-                (HttpServletResponse.class), any(AuthenticationContext.class));
+            doNothing().when(stepBasedSequenceHandler).handlePostAuthentication(any(HttpServletRequest.class), any
+                    (HttpServletResponse.class), any(AuthenticationContext.class));
 
-        // currently we have completed second step
-        context.setCurrentStep(2);
-        context.setSequenceConfig(sequenceConfig);
-        context.setPassiveAuthenticate(true);
-        context.setRequestAuthenticated(false);
+            // currently we have completed second step
+            context.setCurrentStep(2);
+            context.setSequenceConfig(sequenceConfig);
+            context.setPassiveAuthenticate(true);
+            context.setRequestAuthenticated(false);
 
-        stepBasedSequenceHandler.handle(request, response, context);
-        assertResetContext(context);
-        assertTrue(context.getSequenceConfig().isCompleted());
-        assertFalse(context.getSequenceConfig().getStepMap().get(context.getCurrentStep()).isRetrying());
+            stepBasedSequenceHandler.handle(request, response, context);
+            assertResetContext(context);
+            assertTrue(context.getSequenceConfig().isCompleted());
+            assertFalse(context.getSequenceConfig().getStepMap().get(context.getCurrentStep()).isRetrying());
+        }
     }
 
     @DataProvider(name = "postAuthenticationDataProvider")
@@ -952,5 +1101,126 @@ public class DefaultStepBasedSequenceHandlerTest {
 
         assertEquals(context.getSequenceConfig().getAuthenticatedUser().getUserName(),
                 authenticatedUserNameInSequence);
+    }
+
+    @DataProvider
+    public static Object[][] dataProviderResolveRequestedSubject() {
+
+        return new Object[][]{
+                {"userId", null, null, "userId"},
+                {null, "&requested_subject=userId", null, "userId"},
+                {null, null, "userId", "userId"},
+                {null, null, null, null},
+        };
+    }
+
+    @Test(dataProvider = "dataProviderResolveRequestedSubject")
+    public void testResolveRequestedSubject(String userInReParam, String queryParams, String userInSessionContext,
+                                            String results) throws Exception {
+
+        DefaultStepBasedSequenceHandler handler = new DefaultStepBasedSequenceHandler();
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        AuthenticationContext context = mock(AuthenticationContext.class);
+
+        // Simulate no request param, no query param, but session context present
+        when(request.getParameter("requested_subject")).thenReturn(userInReParam);
+        when(context.getQueryParams()).thenReturn(queryParams);
+        when(context.getSessionIdentifier()).thenReturn("session123");
+        when(context.getLoginTenantDomain()).thenReturn("tenant1");
+
+        SessionContext sessionContext = mock(SessionContext.class);
+        when(sessionContext.getImpersonatedUser()).thenReturn(userInSessionContext);
+
+        try (MockedStatic<FrameworkUtils> utils = Mockito.mockStatic(FrameworkUtils.class)) {
+            utils.when(() -> FrameworkUtils.getSessionContextFromCache("session123", "tenant1"))
+                    .thenReturn(sessionContext);
+
+            Method method = DefaultStepBasedSequenceHandler.class
+                    .getDeclaredMethod("resolveRequestedSubject", HttpServletRequest.class,
+                            AuthenticationContext.class);
+            method.setAccessible(true);
+            String result = (String) method.invoke(handler, request, context);
+
+            assertEquals(result, results);
+        }
+    }
+
+
+    @DataProvider(name = "dataProviderExtractFromQueryParams")
+    public Object[][] dataProviderExtractFromQueryParams() {
+
+        return new Object[][]{
+                {"&requested_subject=testUser", "testUser"},
+                {"&requested_subject=null", null},
+                {null, null},
+        };
+    }
+
+    @Test(dataProvider = "dataProviderExtractFromQueryParams")
+    public void testExtractFromQueryParams(String queryParam, String requestedSubject)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+
+        DefaultStepBasedSequenceHandler handler = new DefaultStepBasedSequenceHandler();
+        AuthenticationContext context = Mockito.mock(AuthenticationContext.class);
+
+        Mockito.when(context.getQueryParams()).thenReturn(queryParam);
+        Method method = DefaultStepBasedSequenceHandler.class
+                .getDeclaredMethod("extractFromQueryParams", AuthenticationContext.class);
+        method.setAccessible(true);
+        String result = (String) method.invoke(handler, context);
+
+        assertEquals(result, requestedSubject);
+    }
+
+    @DataProvider(name = "impersonatedUserProvider")
+    public Object[][] impersonatedUserProvider() {
+
+        return new Object[][]{
+                // requestedSubject, hasSeqConfig, hasAppConfig, expectNull
+                {"subject1", true, true, false},
+                {"subject2", false, true, true},
+                {"subject3", true, false, true},
+        };
+    }
+
+    @Test(dataProvider = "impersonatedUserProvider")
+    public void testGetImpersonatedUser(String requestedSubject, boolean hasSeqConfig, boolean hasAppConfig,
+                                        boolean expectNull) throws Exception {
+
+        DefaultStepBasedSequenceHandler handler = new DefaultStepBasedSequenceHandler();
+        AuthenticationContext context = mock(AuthenticationContext.class);
+        AuthenticatedUser impersonatingActor = mock(AuthenticatedUser.class);
+
+        SequenceConfig sequenceConfig = hasSeqConfig ? mock(SequenceConfig.class) : null;
+        ApplicationConfig applicationConfig = hasAppConfig ? mock(ApplicationConfig.class) : null;
+
+        when(context.getSequenceConfig()).thenReturn(sequenceConfig);
+        if (sequenceConfig != null) {
+            when(sequenceConfig.getApplicationConfig()).thenReturn(applicationConfig);
+        }
+        when(context.getTenantDomain()).thenReturn("tenant1");
+        when(impersonatingActor.getAccessingOrganization()).thenReturn("orgA");
+        when(impersonatingActor.getUserResidentOrganization()).thenReturn("orgB");
+
+        try (MockedStatic<FrameworkUtils> frameworkUtilsMockedStatic = Mockito.mockStatic(FrameworkUtils.class)) {
+            if (!expectNull) {
+                ImpersonatedUser impersonated = mock(ImpersonatedUser.class);
+                frameworkUtilsMockedStatic.when(
+                        () -> FrameworkUtils.getImpersonatedUser(requestedSubject, "tenant1", "orgA", "orgB",
+                                applicationConfig)).thenReturn(impersonated);
+            }
+
+            Method method = DefaultStepBasedSequenceHandler.class.getDeclaredMethod(
+                    "getImpersonatedUser", String.class, AuthenticationContext.class, AuthenticatedUser.class);
+            method.setAccessible(true);
+            Object result = method.invoke(handler, requestedSubject, context, impersonatingActor);
+
+            if (expectNull) {
+                assertNull(result);
+            } else {
+                assertNotNull(result);
+                assertTrue(result instanceof ImpersonatedUser);
+            }
+        }
     }
 }

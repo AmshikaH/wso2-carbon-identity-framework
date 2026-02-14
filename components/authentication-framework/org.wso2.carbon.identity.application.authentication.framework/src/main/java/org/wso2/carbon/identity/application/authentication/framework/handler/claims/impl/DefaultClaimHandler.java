@@ -47,6 +47,8 @@ import org.wso2.carbon.identity.application.common.model.IdPGroup;
 import org.wso2.carbon.identity.application.common.model.IdentityProvider;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.mgt.ApplicationConstants;
+import org.wso2.carbon.identity.base.IdentityConstants;
+import org.wso2.carbon.identity.central.log.mgt.utils.LogConstants;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataHandler;
 import org.wso2.carbon.identity.claim.metadata.mgt.exception.ClaimMetadataException;
@@ -55,10 +57,12 @@ import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.user.api.ClaimManager;
 import org.wso2.carbon.user.api.RealmConfiguration;
 import org.wso2.carbon.user.api.UserStoreException;
+import org.wso2.carbon.user.core.UserCoreConstants;
 import org.wso2.carbon.user.core.UserRealm;
 import org.wso2.carbon.user.core.UserStoreManager;
 import org.wso2.carbon.user.core.common.AbstractUserStoreManager;
 import org.wso2.carbon.user.core.service.RealmService;
+import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.DiagnosticLog;
 
 import java.util.ArrayList;
@@ -75,7 +79,10 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.apache.commons.collections.CollectionUtils.isNotEmpty;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ADD_USER_STORE_DOMAIN_TO_GROUPS_CLAIM;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.AdaptiveAuthentication.ALLOW_AUTHENTICATED_SUB_UPDATE;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.Config.SEND_ONLY_LOCALLY_MAPPED_ROLES_OF_IDP;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.JSAttributes.PROP_USERNAME_UPDATED_EXTERNALLY;
 import static org.wso2.carbon.identity.core.util.IdentityUtil.getLocalGroupsClaimURI;
 
 /**
@@ -198,7 +205,10 @@ public class DefaultClaimHandler implements ClaimHandler {
         String serviceProviderMappedUserRoles;
 
         boolean useAppAssociatedRoles = isAppRoleResolverExists() || !CarbonConstants.ENABLE_LEGACY_AUTHZ_RUNTIME;
-        if (useAppAssociatedRoles) {
+        boolean excludeSuperTenantForLegacyRolesClaim =
+                MultitenantConstants.SUPER_TENANT_DOMAIN_NAME.equals(context.getTenantDomain()) &&
+                Boolean.parseBoolean(IdentityUtil.getProperty(IdentityConstants.ALLOW_LEGACY_ROLE_CLAIM_BEHAVIOUR));
+        if (useAppAssociatedRoles && !excludeSuperTenantForLegacyRolesClaim) {
             // This handles the idp group to local role assignments in the new authz flow.
             String idpGroupClaimUri = FrameworkUtils.getEffectiveIdpGroupClaimUri(stepConfig, context);
             boolean idpGroupsExists = isIdpGroupsExistForIDP(context.getExternalIdP().getIdentityProvider());
@@ -292,9 +302,12 @@ public class DefaultClaimHandler implements ClaimHandler {
                                 serviceProviderMappedUserRoles : StringUtils.EMPTY);
             }
             if (CollectionUtils.isNotEmpty(federatedUserRolesUnmappedExclusive)) {
+                Set<String> federatedUserRolesUnmappedInclusiveSetWithoutDomain =
+                        federatedUserRolesUnmappedExclusive.stream().map(UserCoreUtil::removeDomainFromName)
+                                .collect(Collectors.toSet());
                 localUnfilteredClaims.put(FrameworkConstants.APP_ROLES_CLAIM,
                         String.join(FrameworkUtils.getMultiAttributeSeparator(),
-                                federatedUserRolesUnmappedExclusive));
+                                federatedUserRolesUnmappedInclusiveSetWithoutDomain));
             }
         }
 
@@ -355,6 +368,18 @@ public class DefaultClaimHandler implements ClaimHandler {
                     // Get roles claim from the user attributes.
                     String rolesClaim = remoteClaims.get(localToIdPClaimMap.get(FrameworkConstants.ROLES_CLAIM));
                     spFilteredClaims.put(FrameworkConstants.IDP_MAPPED_USER_ROLES, rolesClaim);
+                    spFilteredClaims.put(FrameworkConstants.USER_ORGANIZATION_CLAIM, stepConfig.getAuthenticatedUser()
+                            .getUserResidentOrganization());
+                    localUnfilteredClaims.put(FrameworkConstants.IDP_MAPPED_USER_ROLES, rolesClaim);
+                    if (CarbonConstants.ENABLE_LEGACY_AUTHZ_RUNTIME) {
+                        String appRolesClaim = localToIdPClaimMap.get(FrameworkConstants.APP_ROLES_CLAIM);
+                        if (StringUtils.isNotBlank(appRolesClaim)) {
+                            String appRolesClaimValue = remoteClaims.get(appRolesClaim);
+                            if (StringUtils.isNotBlank(appRolesClaimValue)) {
+                                spFilteredClaims.putIfAbsent(appRolesClaim, appRolesClaimValue);
+                            }
+                        }
+                    }
                 } else {
                     spFilteredClaims.put(FrameworkConstants.IDP_MAPPED_USER_ROLES, StringUtils.EMPTY);
                 }
@@ -405,6 +430,11 @@ public class DefaultClaimHandler implements ClaimHandler {
         ServiceProvider serviceProvider = context.getSequenceConfig().getApplicationConfig().getServiceProvider();
         if (serviceProvider == null) {
             return null;
+        }
+        /* Application and user should be in same tenant domain in order to match the application assigned roles for
+            the user. */
+        if (!StringUtils.equals(serviceProvider.getTenantDomain(), authenticatedUser.getTenantDomain())) {
+            return new ArrayList<>();
         }
         String applicationId = serviceProvider.getApplicationResourceId();
         return FrameworkUtils.getAppAssociatedRolesOfLocalUser(authenticatedUser, applicationId);
@@ -507,6 +537,7 @@ public class DefaultClaimHandler implements ClaimHandler {
                 LoggerUtils.triggerDiagnosticLogEvent(new DiagnosticLog.DiagnosticLogBuilder(
                         FrameworkConstants.LogConstants.AUTHENTICATION_FRAMEWORK,
                         FrameworkConstants.LogConstants.ActionIDs.HANDLE_CLAIM_MAPPING)
+                        .inputParam(LogConstants.InputKeys.APPLICATION_NAME, appConfig.getApplicationName())
                         .resultMessage("Handling service provider requested claims.")
                         .logDetailLevel(DiagnosticLog.LogDetailLevel.APPLICATION)
                         .resultStatus(DiagnosticLog.ResultStatus.SUCCESS));
@@ -757,11 +788,15 @@ public class DefaultClaimHandler implements ClaimHandler {
                             appAssociatedRoles));
                 }
                 if (isAppRoleClaimRequested) {
+                    List<String> appAssociatedRolesWithoutDomain = appAssociatedRoles.stream()
+                            .map(UserCoreUtil::removeDomainFromName)
+                            .collect(Collectors.toList());;
                     allLocalClaims.put(FrameworkConstants.APP_ROLES_CLAIM, String.join(FrameworkUtils
-                            .getMultiAttributeSeparator(), appAssociatedRoles));
+                            .getMultiAttributeSeparator(), appAssociatedRolesWithoutDomain));
                 }
             } else {
-                if (isRoleClaimRequested) {
+                if (isRoleClaimRequested && !Boolean.parseBoolean(IdentityUtil.getProperty(
+                        IdentityConstants.ALLOW_LEGACY_ROLE_CLAIM_BEHAVIOUR))) {
                     allLocalClaims.put(rolesClaimURI, String.join(FrameworkUtils.getMultiAttributeSeparator(),
                             StringUtils.EMPTY));
                 }
@@ -776,6 +811,8 @@ public class DefaultClaimHandler implements ClaimHandler {
         allLocalClaims.putAll(context.getRuntimeClaims());
 
         handleRoleClaim(context, allLocalClaims);
+
+        handleGroupClaim(context, allLocalClaims);
 
         // if standard dialect get all claim mappings from standard dialect to carbon dialect
         spToLocalClaimMappings = getStandardDialectToCarbonMapping(spStandardDialect, context, spToLocalClaimMappings,
@@ -948,8 +985,8 @@ public class DefaultClaimHandler implements ClaimHandler {
                         authenticatedUser.getLoggableUserId() + " in " + tenantDomain, e);
             }
         } catch (UserIdNotFoundException e) {
-            throw new FrameworkException("User id is not available for user: " + authenticatedUser.getLoggableUserId(),
-                    e);
+            throw new FrameworkException("User id is not available for user: " +
+                    authenticatedUser.getLoggableMaskedUserId(), e);
         }
         return allLocalClaims;
     }
@@ -1124,11 +1161,20 @@ public class DefaultClaimHandler implements ClaimHandler {
                             + " not found in user store");
                 }
             }
+            if (Boolean.parseBoolean(IdentityUtil.getProperty(ALLOW_AUTHENTICATED_SUB_UPDATE)) &&
+                    Boolean.parseBoolean((String) context.getProperty(PROP_USERNAME_UPDATED_EXTERNALLY))) {
+                /*
+                 If the username is updated externally, we will update the authenticated user identifier with the
+                 username. This support is provided initially for adaptive scripts. If any other places needs to
+                 update the subject identifier externally from username, we can use the same property.
+                */
+                context.setProperty(SERVICE_PROVIDER_SUBJECT_CLAIM_VALUE, authenticatedUser.getUserName());
+            }
         } catch (UserStoreException e) {
             log.error("Error occurred while retrieving " + subjectURI + " claim value for user "
                             + authenticatedUser.getLoggableUserId(), e);
         } catch (UserIdNotFoundException e) {
-            log.error("User id is not available for user: " + authenticatedUser.getLoggableUserId(), e);
+            log.error("User id is not available for user: " + authenticatedUser.getLoggableMaskedUserId(), e);
         }
     }
 
@@ -1314,6 +1360,44 @@ public class DefaultClaimHandler implements ClaimHandler {
                 mappedAttrs.put(getLocalGroupsClaimURI(), FrameworkUtils
                         .removeDomainFromNamesExcludeHybrid(Arrays.asList(groups)));
             }
+        }
+    }
+
+    /**
+     * Specially handle group claim values.
+     *
+     * @param context Authentication context.
+     * @param mappedAttrs Mapped claim attributes.
+     */
+    private void handleGroupClaim(AuthenticationContext context, Map<String, String> mappedAttrs) {
+
+        if (!IdentityUtil.isGroupsVsRolesSeparationImprovementsEnabled() ||
+                !Boolean.parseBoolean(IdentityUtil.getProperty(ADD_USER_STORE_DOMAIN_TO_GROUPS_CLAIM))) {
+            if (log.isDebugEnabled()) {
+                log.debug("Appending user store for groups claim is skipped: feature disabled or property not set.");
+            }
+            return;
+        }
+
+        if (!mappedAttrs.containsKey(UserCoreConstants.USER_STORE_GROUPS_CLAIM) ||
+                context.getLastAuthenticatedUser() == null) {
+            return;
+        }
+
+        String userStoreDomain = context.getLastAuthenticatedUser().getUserStoreDomain();
+        if (IdentityUtil.getPrimaryDomainName().equals(userStoreDomain)) {
+            return;
+        }
+        String domainPrefix = userStoreDomain + "/";
+        String multiAttributeSeparator = FrameworkUtils.getMultiAttributeSeparator(userStoreDomain);
+        String[] groups = mappedAttrs.get(UserCoreConstants.USER_STORE_GROUPS_CLAIM).split(multiAttributeSeparator);
+
+        List<String> groupList = Arrays.stream(groups).filter(group -> !group.trim().isEmpty())
+                .map(group -> domainPrefix + group).collect(Collectors.toList());
+        mappedAttrs.put(UserCoreConstants.USER_STORE_GROUPS_CLAIM, String.join(multiAttributeSeparator, groupList));
+        if (log.isDebugEnabled()) {
+            log.debug("Updated group claim with user store domain prefix for user: " +
+                    context.getLastAuthenticatedUser().getLoggableMaskedUserId() + ", domain: " + userStoreDomain);
         }
     }
 

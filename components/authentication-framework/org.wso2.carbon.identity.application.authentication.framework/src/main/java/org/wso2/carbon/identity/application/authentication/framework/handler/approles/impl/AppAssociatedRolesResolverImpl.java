@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2023-2025, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -20,6 +20,7 @@ package org.wso2.carbon.identity.application.authentication.framework.handler.ap
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
+import org.osgi.annotation.bundle.Capability;
 import org.wso2.carbon.identity.application.authentication.framework.exception.UserIdNotFoundException;
 import org.wso2.carbon.identity.application.authentication.framework.handler.approles.ApplicationRolesResolver;
 import org.wso2.carbon.identity.application.authentication.framework.handler.approles.exception.ApplicationRolesException;
@@ -33,7 +34,10 @@ import org.wso2.carbon.identity.application.common.model.IdPGroup;
 import org.wso2.carbon.identity.application.common.model.IdentityProvider;
 import org.wso2.carbon.identity.application.common.model.RoleV2;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
+import org.wso2.carbon.identity.organization.management.service.exception.OrganizationManagementException;
+import org.wso2.carbon.identity.role.v2.mgt.core.RoleManagementService;
 import org.wso2.carbon.identity.role.v2.mgt.core.exception.IdentityRoleManagementException;
+import org.wso2.carbon.identity.role.v2.mgt.core.model.Role;
 import org.wso2.carbon.idp.mgt.IdentityProviderManagementException;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.user.api.UserStoreManager;
@@ -63,6 +67,14 @@ import static org.wso2.carbon.user.mgt.UserMgtConstants.INTERNAL_ROLE;
 /**
  * Application associated roles resolver implementation.
  */
+@Capability(
+        namespace = "osgi.service",
+        attribute = {
+                "objectClass=org.wso2.carbon.identity.application.authentication.framework.handler.approles." +
+                        "ApplicationRolesResolver",
+                "service.scope=singleton"
+        }
+)
 public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver {
 
     @Override
@@ -104,6 +116,15 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
         return getAppAssociatedRolesForLocalUser(authenticatedUser, applicationId);
     }
 
+    @Override
+    public String[] getAppAssociatedRolesOfFederatedUser(Map<ClaimMapping, String> fedUserAttributes,
+                                                         IdentityProvider identityProvider, String applicationId,
+                                                         String idpGroupClaimURI, String tenantDomain)
+            throws ApplicationRolesException {
+
+        return getAppAssociatedRolesForFederatedUser(fedUserAttributes, identityProvider, applicationId,
+                idpGroupClaimURI, tenantDomain);
+    }
 
     /**
      * Get app associated roles for local user for given app.
@@ -119,6 +140,10 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
         Set<String> userRoleIds = getAllRolesOfLocalUser(authenticatedUser);
         List<RoleV2> rolesAssociatedWithApp = getRolesAssociatedWithApplication(applicationId,
                 authenticatedUser.getTenantDomain());
+        if (StringUtils.isNotEmpty(authenticatedUser.getSharedUserId())) {
+            // Add the shared role details to the roles list which are associated with the application.
+            addSharedRoleAssociations(authenticatedUser, rolesAssociatedWithApp, userRoleIds);
+        }
 
         return rolesAssociatedWithApp.stream()
                 .filter(role -> userRoleIds.contains(role.getId()))
@@ -126,6 +151,49 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
                 .toArray(String[]::new);
     }
 
+    private void addSharedRoleAssociations(AuthenticatedUser authenticatedUser, List<RoleV2> rolesAssociatedWithApp,
+                                           Set<String> userRoleIds) throws ApplicationRolesException {
+
+        if (!isSharedUserAccessingSharedOrg(authenticatedUser)) {
+            return;
+        }
+        try {
+            String sharedTenantDomain = FrameworkServiceDataHolder.getInstance().getOrganizationManager()
+                    .resolveTenantDomain(authenticatedUser.getAccessingOrganization());
+            List<String> roleIdsAssociatedWithApp = new ArrayList<>();
+            for (RoleV2 role : rolesAssociatedWithApp) {
+                roleIdsAssociatedWithApp.add(role.getId());
+            }
+            RoleManagementService roleManagementService =
+                    FrameworkServiceDataHolder.getInstance().getRoleManagementServiceV2();
+            // Extracting the mapping between the main role and the shared role for the sub organization.
+            Map<String, String> mainRoleToSharedRoleMappingsBySubOrg =
+                    roleManagementService.getMainRoleToSharedRoleMappingsBySubOrg(
+                            roleIdsAssociatedWithApp, sharedTenantDomain);
+            if (mainRoleToSharedRoleMappingsBySubOrg != null && !mainRoleToSharedRoleMappingsBySubOrg.isEmpty()) {
+                for (String mainRoleId : roleIdsAssociatedWithApp) {
+                    String sharedRoleId = mainRoleToSharedRoleMappingsBySubOrg.get(mainRoleId);
+                    /*
+                    If the shared role id is available in the role mapping, add the shared role details to the
+                    roles list which are associated with the application.
+                    */
+                    if (userRoleIds.contains(sharedRoleId)) {
+                        Role sharedRole = roleManagementService.getRole(sharedRoleId, sharedTenantDomain);
+                        RoleV2 sharedRoleV2 = new RoleV2();
+                        sharedRoleV2.setId(sharedRole.getId());
+                        sharedRoleV2.setName(sharedRole.getName());
+                        rolesAssociatedWithApp.add(sharedRoleV2);
+                    }
+                }
+            }
+        } catch (OrganizationManagementException e) {
+            throw new ApplicationRolesException("Error while resolving the tenant domain from the organization " +
+                    "id: " + authenticatedUser.getAccessingOrganization(), e.getMessage());
+        } catch (IdentityRoleManagementException e) {
+            throw new ApplicationRolesException("Error while extracting the role details for the organization " +
+                    "id: " + authenticatedUser.getAccessingOrganization(), e.getMessage());
+        }
+    }
 
     /**
      * Get app associated roles for federated user for given app.
@@ -139,9 +207,40 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
     private String[] getAppAssociatedRolesForFederatedUser(AuthenticatedUser authenticatedUser, String applicationId,
                                                            String idpGroupClaimURI) throws ApplicationRolesException {
 
-        Set<String> federatedUserRoleIds = getAllRolesOfFederatedUser(authenticatedUser, idpGroupClaimURI);
-        List<RoleV2> rolesAssociatedWithApp = getRolesAssociatedWithApplication(applicationId,
-                authenticatedUser.getTenantDomain());
+        String tenantDomain = authenticatedUser.getTenantDomain();
+        String idpName = authenticatedUser.getFederatedIdPName();
+        IdentityProvider identityProvider = getIDP(idpName, tenantDomain);
+        Map<ClaimMapping, String> fedUserAttributes = authenticatedUser.getUserAttributes();
+
+        Set<String> federatedUserRoleIds =
+                getAllRolesOfFederatedUser(fedUserAttributes, identityProvider, idpGroupClaimURI, tenantDomain);
+        List<RoleV2> rolesAssociatedWithApp = getRolesAssociatedWithApplication(applicationId, tenantDomain);
+
+        return rolesAssociatedWithApp.stream()
+                .filter(role -> federatedUserRoleIds.contains(role.getId()))
+                .map(role -> appendInternalDomain(role.getName()))
+                .toArray(String[]::new);
+    }
+
+    /**
+     * Get app associated roles for federated user for given app.
+     *
+     * @param fedUserAttributes Federated user attributes.
+     * @param identityProvider  Identity provider.
+     * @param applicationId     Application ID.
+     * @param idpGroupClaimURI  IDP group claim URI.
+     * @param tenantDomain      Tenant domain.
+     * @return App associated roles for federated user.
+     * @throws ApplicationRolesException If an error occurred while getting app associated roles for federated user.
+     */
+    private String[] getAppAssociatedRolesForFederatedUser(Map<ClaimMapping, String> fedUserAttributes,
+                                                           IdentityProvider identityProvider, String applicationId,
+                                                           String idpGroupClaimURI, String tenantDomain)
+            throws ApplicationRolesException {
+
+        Set<String> federatedUserRoleIds =
+                getAllRolesOfFederatedUser(fedUserAttributes, identityProvider, idpGroupClaimURI, tenantDomain);
+        List<RoleV2> rolesAssociatedWithApp = getRolesAssociatedWithApplication(applicationId, tenantDomain);
 
         return rolesAssociatedWithApp.stream()
                 .filter(role -> federatedUserRoleIds.contains(role.getId()))
@@ -161,12 +260,18 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
 
         try {
             List<String> userGroups = getUserGroups(authenticatedUser);
-            List<String> roleIdsFromUserGroups = getRoleIdsOfGroups(userGroups, authenticatedUser.getTenantDomain());
-            List<String> roleIdsFromUser =
-                    getRoleIdsOfUser(authenticatedUser.getUserId(), authenticatedUser.getTenantDomain());
+            String userId = authenticatedUser.getUserId();
+            String tenantDomain = authenticatedUser.getTenantDomain();
+            if (isSharedUserAccessingSharedOrg(authenticatedUser)) {
+                tenantDomain = FrameworkServiceDataHolder.getInstance().getOrganizationManager()
+                        .resolveTenantDomain(authenticatedUser.getAccessingOrganization());
+                userId = authenticatedUser.getSharedUserId();
+            }
+            List<String> roleIdsFromUserGroups = getRoleIdsOfGroups(userGroups, tenantDomain);
+            List<String> roleIdsFromUser = getRoleIdsOfUser(userId, tenantDomain);
 
             return new HashSet<>(CollectionUtils.union(roleIdsFromUserGroups, roleIdsFromUser));
-        } catch (IdentityRoleManagementException | UserIdNotFoundException e) {
+        } catch (IdentityRoleManagementException | UserIdNotFoundException | OrganizationManagementException e) {
             throw RoleResolverUtils.handleServerException(ERROR_CODE_RETRIEVING_APP_ROLES, e);
         }
     }
@@ -174,21 +279,23 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
     /**
      * Get all roles of the federated user.
      *
-     * @param authenticatedUser Authenticated user.
+     * @param fedUserAttributes Federated user attributes.
+     * @param identityProvider  Identity provider.
+     * @param idpGroupClaimURI  IDP group claim URI.
+     * @param tenantDomain      Tenant domain.
      * @return All the roles assigned to the federated user.
      * @throws ApplicationRolesException If an error occurred while getting all roles of a federated user.
      */
-    private Set<String> getAllRolesOfFederatedUser(AuthenticatedUser authenticatedUser, String idpGroupClaimURI)
+    private Set<String> getAllRolesOfFederatedUser(Map<ClaimMapping, String> fedUserAttributes,
+                                                   IdentityProvider identityProvider, String idpGroupClaimURI,
+                                                   String tenantDomain)
             throws ApplicationRolesException {
 
-        String tenantDomain = authenticatedUser.getTenantDomain();
-        String idpName = authenticatedUser.getFederatedIdPName();
-        IdentityProvider identityProvider = getIDP(idpName, tenantDomain);
         if (identityProvider == null) {
             return Collections.emptySet();
         }
         IdPGroup[] idpGroups = identityProvider.getIdPGroupConfig();
-        List<String> idpGroupNamesOfUser = getFederatedIdPGroupNamesOfUser(authenticatedUser, identityProvider,
+        List<String> idpGroupNamesOfUser = getFederatedIdPGroupNamesOfUser(fedUserAttributes, identityProvider,
                 idpGroupClaimURI);
         if (CollectionUtils.isEmpty(idpGroupNamesOfUser)) {
             return Collections.emptySet();
@@ -287,11 +394,12 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
     /**
      * Get federated user IDP groups.
      *
-     * @param authenticatedUser Authenticated user.
+     * @param fedUserAttributes Federated user attributes.
      * @param federatedIdP      Federated IDP.
+     * @param idpGroupClaimURI  IDP group claim URI.
      * @return Federated user IDP groups.
      */
-    private List<String> getFederatedIdPGroupNamesOfUser(AuthenticatedUser authenticatedUser,
+    private List<String> getFederatedIdPGroupNamesOfUser(Map<ClaimMapping, String> fedUserAttributes,
                                                          IdentityProvider federatedIdP, String idpGroupClaimURI) {
 
         if (federatedIdP != null) {
@@ -299,7 +407,7 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
                 idpGroupClaimURI = FrameworkUtils.getIdpGroupClaimUri(federatedIdP.getClaimConfig().getClaimMappings());
             }
             if (idpGroupClaimURI != null) {
-                String[] idpGroups = getIdPUserGroups(authenticatedUser, idpGroupClaimURI);
+                String[] idpGroups = getIdPUserGroups(fedUserAttributes, idpGroupClaimURI);
                 if (idpGroups != null && idpGroups.length > 0) {
                     return Arrays.asList(idpGroups);
                 }
@@ -322,9 +430,22 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
         RealmService realmService = UserCoreUtil.getRealmService();
         try {
             int tenantId = IdentityTenantUtil.getTenantId(authenticatedUser.getTenantDomain());
+            String userId = authenticatedUser.getUserId();
+            /*
+            If the shared user is accessing the same shared organization, get the tenant and the user id
+            from the shared user.
+            */
+            if (isSharedUserAccessingSharedOrg(authenticatedUser)) {
+                String accessingTenantDomain = FrameworkServiceDataHolder.getInstance().getOrganizationManager()
+                        .resolveTenantDomain(authenticatedUser.getAccessingOrganization());
+                tenantId = IdentityTenantUtil.getTenantId(accessingTenantDomain);
+                if (StringUtils.isNotEmpty(authenticatedUser.getSharedUserId())) {
+                    userId = authenticatedUser.getSharedUserId();
+                }
+            }
             UserStoreManager userStoreManager = realmService.getTenantUserRealm(tenantId).getUserStoreManager();
             List<Group> groups = ((AbstractUserStoreManager) userStoreManager)
-                    .getGroupListOfUser(authenticatedUser.getUserId(), null, null);
+                    .getGroupListOfUser(userId, null, null);
             // Exclude internal and application groups from the list.
             for (Group group : groups) {
                 String groupName = group.getGroupName();
@@ -333,7 +454,7 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
                     userGroups.add(group.getGroupID());
                 }
             }
-        } catch (UserIdNotFoundException e) {
+        } catch (UserIdNotFoundException | OrganizationManagementException e) {
             throw RoleResolverUtils.handleServerException(ERROR_CODE_RETRIEVING_LOCAL_USER_GROUPS,
                     e);
         } catch (UserStoreException e) {
@@ -344,6 +465,14 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
                     e);
         }
         return userGroups;
+    }
+
+    private boolean isSharedUserAccessingSharedOrg(AuthenticatedUser authenticatedUser) {
+
+        return StringUtils.isNotEmpty(authenticatedUser.getUserSharedOrganizationId()) &&
+                StringUtils.isNotEmpty(authenticatedUser.getAccessingOrganization()) &&
+                StringUtils.equals(authenticatedUser.getUserSharedOrganizationId(),
+                        authenticatedUser.getAccessingOrganization());
     }
 
     /**
@@ -368,15 +497,14 @@ public class AppAssociatedRolesResolverImpl implements ApplicationRolesResolver 
     /**
      * Get the IdP groups of the federated authenticated user.
      *
-     * @param authenticatedUser Authenticated federated user.
+     * @param fedUserAttributes Federated user attributes.
      * @param idpGroupClaimUri  IDP group claim URI.
      * @return IdP groups of the authenticated user.
      */
-    private String[] getIdPUserGroups(AuthenticatedUser authenticatedUser, String idpGroupClaimUri) {
+    private String[] getIdPUserGroups(Map<ClaimMapping, String> fedUserAttributes, String idpGroupClaimUri) {
 
         String idpGroupClaimValueSeparator = FrameworkUtils.getIdpGroupClaimValueSeparator();
-        Map<ClaimMapping, String> userAttributes = authenticatedUser.getUserAttributes();
-        for (Map.Entry<ClaimMapping, String> entry : userAttributes.entrySet()) {
+        for (Map.Entry<ClaimMapping, String> entry : fedUserAttributes.entrySet()) {
             ClaimMapping claimMapping = entry.getKey();
             if (idpGroupClaimUri.equals(claimMapping.getRemoteClaim().getClaimUri())) {
                 String idPGroupsClaim = entry.getValue();

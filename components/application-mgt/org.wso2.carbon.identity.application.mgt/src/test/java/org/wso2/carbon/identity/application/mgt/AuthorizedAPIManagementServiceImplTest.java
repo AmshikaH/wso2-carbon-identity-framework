@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2023-2024, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -19,11 +19,13 @@
 package org.wso2.carbon.identity.application.mgt;
 
 import org.mockito.Mock;
-import org.powermock.modules.testng.PowerMockTestCase;
+import org.mockito.MockedStatic;
 import org.testng.Assert;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
+import org.wso2.carbon.CarbonConstants;
 import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
@@ -33,7 +35,10 @@ import org.wso2.carbon.core.internal.CarbonCoreDataHolder;
 import org.wso2.carbon.identity.api.resource.mgt.APIResourceManager;
 import org.wso2.carbon.identity.api.resource.mgt.APIResourceManagerImpl;
 import org.wso2.carbon.identity.api.resource.mgt.APIResourceMgtException;
+import org.wso2.carbon.identity.api.resource.mgt.internal.APIResourceManagementServiceComponentHolder;
+import org.wso2.carbon.identity.application.common.IdentityApplicationManagementException;
 import org.wso2.carbon.identity.application.common.model.APIResource;
+import org.wso2.carbon.identity.application.common.model.AuthorizationDetailsType;
 import org.wso2.carbon.identity.application.common.model.AuthorizedAPI;
 import org.wso2.carbon.identity.application.common.model.AuthorizedScopes;
 import org.wso2.carbon.identity.application.common.model.Scope;
@@ -41,6 +46,7 @@ import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.mgt.internal.ApplicationManagementServiceComponentHolder;
 import org.wso2.carbon.identity.application.mgt.provider.ApplicationPermissionProvider;
 import org.wso2.carbon.identity.application.mgt.provider.RegistryBasedApplicationPermissionProvider;
+import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.common.testng.WithAxisConfiguration;
 import org.wso2.carbon.identity.common.testng.WithCarbonHome;
 import org.wso2.carbon.identity.common.testng.WithH2Database;
@@ -48,7 +54,7 @@ import org.wso2.carbon.identity.common.testng.WithRealmService;
 import org.wso2.carbon.identity.common.testng.WithRegistry;
 import org.wso2.carbon.identity.common.testng.realm.InMemoryRealmService;
 import org.wso2.carbon.identity.common.testng.realm.MockUserStoreManager;
-import org.wso2.carbon.identity.core.internal.IdentityCoreServiceDataHolder;
+import org.wso2.carbon.identity.core.internal.component.IdentityCoreServiceDataHolder;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.event.services.IdentityEventService;
 import org.wso2.carbon.identity.organization.management.service.internal.OrganizationManagementDataHolder;
@@ -71,9 +77,10 @@ import static java.lang.Boolean.FALSE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.powermock.api.mockito.PowerMockito.doNothing;
-import static org.powermock.api.mockito.PowerMockito.mock;
-import static org.powermock.api.mockito.PowerMockito.when;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 import static org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
 import static org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENANT_ID;
 
@@ -82,7 +89,7 @@ import static org.wso2.carbon.utils.multitenancy.MultitenantConstants.SUPER_TENA
 @WithRegistry
 @WithRealmService(injectToSingletons = {OrganizationManagementDataHolder.class})
 @WithH2Database(files = {"dbscripts/identity.sql"})
-public class AuthorizedAPIManagementServiceImplTest extends PowerMockTestCase {
+public class AuthorizedAPIManagementServiceImplTest {
 
     private String tenantDomain;
     private APIResourceManager apiResourceManager;
@@ -102,6 +109,19 @@ public class AuthorizedAPIManagementServiceImplTest extends PowerMockTestCase {
         identityEventService = mock(IdentityEventService.class);
         doNothing().when(identityEventService).handleEvent(any());
         ApplicationManagementServiceComponentHolder.getInstance().setIdentityEventService(identityEventService);
+        APIResourceManagementServiceComponentHolder.getInstance().setRichAuthorizationRequestsEnabled(true);
+        APIResourceManagementServiceComponentHolder.getInstance().setIdentityEventService(identityEventService);
+        CarbonConstants.ENABLE_LEGACY_AUTHZ_RUNTIME = false;
+    }
+
+    @AfterMethod
+    public void tearDown() throws Exception {
+
+        try (MockedStatic<LoggerUtils> loggerUtils = mockStatic(LoggerUtils.class)) {
+            loggerUtils.when(() -> LoggerUtils.triggerAuditLogEvent(any())).thenAnswer(inv -> null);
+
+            applicationManagementService.deleteApplication("TestApp", tenantDomain, "user 1");
+        }
     }
 
     @DataProvider
@@ -252,6 +272,11 @@ public class AuthorizedAPIManagementServiceImplTest extends PowerMockTestCase {
         authzAPI = authorizedAPIManagementService.getAuthorizedAPI(authorizedAPI.getAppId(),
                 authorizedAPI.getAPIId(), tenantDomain);
         Assert.assertNull(authzAPI);
+
+        List<AuthorizationDetailsType> fetchedTypes =
+                authorizedAPIManagementService.getAuthorizedAuthorizationDetailsTypes(appId, tenantDomain);
+        Assert.assertNotNull(fetchedTypes);
+        Assert.assertTrue(fetchedTypes.isEmpty());
     }
 
     private void setupConfiguration() throws UserStoreException, RegistryException {
@@ -342,21 +367,39 @@ public class AuthorizedAPIManagementServiceImplTest extends PowerMockTestCase {
                 .displayName("displayName 2 " + postfix)
                 .description("description 2 " + postfix).build());
 
+        List<AuthorizationDetailsType> authorizationDetailsTypes = new ArrayList<>();
+        authorizationDetailsTypes.add(new AuthorizationDetailsType.AuthorizationDetailsTypesBuilder()
+                .type("type 1 " + postfix)
+                .name("name 1 " + postfix)
+                .description("description 1 " + postfix)
+                .build());
+        authorizationDetailsTypes.add(new AuthorizationDetailsType.AuthorizationDetailsTypesBuilder()
+                .type("type 2 " + postfix)
+                .name("name 2 " + postfix)
+                .description("description 2 " + postfix)
+                .build());
+
         APIResource.APIResourceBuilder apiResourceBuilder = new APIResource.APIResourceBuilder()
                 .name("testAPIResource name " + postfix)
                 .identifier("testAPIResource identifier " + postfix)
                 .description("testAPIResource description " + postfix)
                 .type("BUSINESS")
                 .requiresAuthorization(true)
-                .scopes(scopes);
+                .scopes(scopes)
+                .authorizationDetailsTypes(authorizationDetailsTypes);
+
         return apiResourceManager.addAPIResource(apiResourceBuilder.build(), tenantDomain);
     }
 
     private String addApplication() throws Exception {
 
-        ServiceProvider serviceProvider = new ServiceProvider();
-        serviceProvider.setApplicationName("TestApp");
-        return applicationManagementService.createApplication(serviceProvider, tenantDomain, "user 1");
+        try (MockedStatic<LoggerUtils> loggerUtils = mockStatic(LoggerUtils.class)) {
+            loggerUtils.when(() -> LoggerUtils.triggerAuditLogEvent(any())).thenAnswer(inv -> null);
+
+            ServiceProvider serviceProvider = new ServiceProvider();
+            serviceProvider.setApplicationName("TestApp");
+            return applicationManagementService.createApplication(serviceProvider, tenantDomain, "user 1");
+        }
     }
 
     private void removeTestAPIResources() throws Exception {
@@ -373,5 +416,133 @@ public class AuthorizedAPIManagementServiceImplTest extends PowerMockTestCase {
                 );
     }
 
+    @Test
+    public void shouldCreateAuthorizedAPIWithNoScopes() throws Exception {
 
+        String appId = addApplication();
+        APIResource apiResource = addTestAPIResource("test-create-1");
+        AuthorizedAPI authorizedAPI = new AuthorizedAPI.AuthorizedAPIBuilder()
+                .apiId(apiResource.getId())
+                .appId(appId)
+                .policyId("RBAC")
+                .build();
+
+        authorizedAPIManagementService.addAuthorizedAPI(authorizedAPI.getAppId(), authorizedAPI, tenantDomain);
+        ApplicationManagementServiceComponentHolder.getInstance().setAPIResourceManager(apiResourceManager);
+        List<AuthorizedAPI> authorizedAPIs =
+                authorizedAPIManagementService.getAuthorizedAPIs(authorizedAPI.getAppId(), tenantDomain);
+
+        Assert.assertFalse(authorizedAPIs.isEmpty());
+        Assert.assertEquals(authorizedAPIs.size(), 1);
+        Assert.assertEquals(authorizedAPIs.get(0).getScopes().size(), 0);
+        Assert.assertEquals(authorizedAPIs.get(0).getAuthorizationDetailsTypes().size(), 0);
+    }
+
+    @Test
+    public void shouldCreateAuthorizedAPIWithAuthorizationDetails() throws Exception {
+
+        String appId = addApplication();
+        APIResource apiResource = addTestAPIResource("test-create-2");
+        AuthorizedAPI authorizedAPI = new AuthorizedAPI.AuthorizedAPIBuilder()
+                .apiId(apiResource.getId())
+                .appId(appId)
+                .policyId("RBAC")
+                .authorizationDetailsTypes(apiResource.getAuthorizationDetailsTypes())
+                .build();
+
+        authorizedAPIManagementService.addAuthorizedAPI(authorizedAPI.getAppId(), authorizedAPI, tenantDomain);
+        ApplicationManagementServiceComponentHolder.getInstance().setAPIResourceManager(apiResourceManager);
+        List<AuthorizedAPI> authorizedAPIs =
+                authorizedAPIManagementService.getAuthorizedAPIs(authorizedAPI.getAppId(), tenantDomain);
+
+        Assert.assertFalse(authorizedAPIs.isEmpty());
+        Assert.assertEquals(authorizedAPIs.size(), 1);
+        Assert.assertEquals(authorizedAPIs.get(0).getScopes().size(), 0);
+        Assert.assertEquals(authorizedAPIs.get(0).getAuthorizationDetailsTypes().size(), 2);
+    }
+
+    @Test
+    public void shouldCreateAuthorizedAPIWithScopesAndAuthorizationDetails() throws Exception {
+
+        String appId = addApplication();
+        APIResource apiResource = addTestAPIResource("test-create-3");
+        AuthorizedAPI authorizedAPI = new AuthorizedAPI.AuthorizedAPIBuilder()
+                .apiId(apiResource.getId())
+                .appId(appId)
+                .policyId("RBAC")
+                .scopes(apiResource.getScopes())
+                .authorizationDetailsTypes(apiResource.getAuthorizationDetailsTypes())
+                .build();
+
+        authorizedAPIManagementService.addAuthorizedAPI(authorizedAPI.getAppId(), authorizedAPI, tenantDomain);
+        ApplicationManagementServiceComponentHolder.getInstance().setAPIResourceManager(apiResourceManager);
+        List<AuthorizedAPI> authorizedAPIs =
+                authorizedAPIManagementService.getAuthorizedAPIs(authorizedAPI.getAppId(), tenantDomain);
+
+        Assert.assertFalse(authorizedAPIs.isEmpty());
+        Assert.assertEquals(authorizedAPIs.size(), 1);
+        Assert.assertEquals(authorizedAPIs.get(0).getScopes().size(), 2);
+        Assert.assertEquals(authorizedAPIs.get(0).getAuthorizationDetailsTypes().size(), 2);
+    }
+
+    @Test
+    public void shouldPatchAuthorizedApiWithValidAuthorizationDetailsType() throws Exception {
+
+        final String appId = addApplication();
+        final String postfix = "test-create-4";
+        final String type1 = "type 1 " + postfix;
+        final String type2 = "type 2 " + postfix;
+
+        APIResource apiResource = addTestAPIResource(postfix);
+        AuthorizedAPI authorizedAPI = new AuthorizedAPI.AuthorizedAPIBuilder()
+                .apiId(apiResource.getId())
+                .appId(appId)
+                .policyId("RBAC")
+                .scopes(apiResource.getScopes())
+                .authorizationDetailsTypes(apiResource.getAuthorizationDetailsTypes())
+                .build();
+
+        authorizedAPIManagementService.addAuthorizedAPI(authorizedAPI.getAppId(), authorizedAPI, tenantDomain);
+
+        authorizedAPIManagementService.patchAuthorizedAPI(authorizedAPI.getAppId(), authorizedAPI.getAPIId(),
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+                Collections.singletonList(type1), tenantDomain);
+
+        List<AuthorizationDetailsType> fetchedTypes =
+                authorizedAPIManagementService.getAuthorizedAuthorizationDetailsTypes(appId, tenantDomain);
+        Assert.assertFalse(fetchedTypes.isEmpty());
+        Assert.assertEquals(fetchedTypes.size(), 1);
+        Assert.assertFalse(fetchedTypes.stream().map(AuthorizationDetailsType::getType).anyMatch(type1::equals));
+        Assert.assertTrue(fetchedTypes.stream().map(AuthorizationDetailsType::getType).anyMatch(type2::equals));
+
+        authorizedAPIManagementService.patchAuthorizedAPI(authorizedAPI.getAppId(), authorizedAPI.getAPIId(),
+                Collections.emptyList(), Collections.emptyList(), Collections.singletonList(type1),
+                Collections.emptyList(), tenantDomain);
+
+        fetchedTypes = authorizedAPIManagementService.getAuthorizedAuthorizationDetailsTypes(appId, tenantDomain);
+        Assert.assertFalse(fetchedTypes.isEmpty());
+        Assert.assertEquals(fetchedTypes.size(), 2);
+        Assert.assertTrue(fetchedTypes.stream().map(AuthorizationDetailsType::getType).anyMatch(type1::equals));
+    }
+
+    @Test(expectedExceptions = {IdentityApplicationManagementException.class})
+    public void shouldThrowExceptionWhenAddingInvalidAuthorizationDetailsType() throws Exception {
+
+        final String appId = addApplication();
+        List<AuthorizationDetailsType> authorizationDetailsTypes = new ArrayList<>();
+        authorizationDetailsTypes.add(new AuthorizationDetailsType.AuthorizationDetailsTypesBuilder()
+                .type("invalid type")
+                .build());
+
+        APIResource apiResource = addTestAPIResource("test-create-5");
+        AuthorizedAPI authorizedAPI = new AuthorizedAPI.AuthorizedAPIBuilder()
+                .apiId(apiResource.getId())
+                .appId(appId)
+                .policyId("RBAC")
+                .scopes(apiResource.getScopes())
+                .authorizationDetailsTypes(authorizationDetailsTypes)
+                .build();
+
+        authorizedAPIManagementService.addAuthorizedAPI(authorizedAPI.getAppId(), authorizedAPI, tenantDomain);
+    }
 }

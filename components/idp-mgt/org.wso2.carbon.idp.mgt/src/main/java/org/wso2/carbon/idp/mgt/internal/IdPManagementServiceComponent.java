@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+ * Copyright (c) 2014-2025 WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
  *
  * WSO2 Inc. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -33,6 +33,7 @@ import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
 import org.wso2.carbon.base.MultitenantConstants;
+import org.wso2.carbon.identity.action.management.api.service.ActionManagementService;
 import org.wso2.carbon.identity.application.common.model.IdentityProvider;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants;
 import org.wso2.carbon.identity.claim.metadata.mgt.ClaimMetadataManagementService;
@@ -41,8 +42,11 @@ import org.wso2.carbon.identity.core.ConnectorConfig;
 import org.wso2.carbon.identity.core.util.IdentityCoreInitializedEvent;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
+import org.wso2.carbon.identity.organization.management.service.OrganizationManager;
+import org.wso2.carbon.identity.organization.resource.hierarchy.traverse.service.OrgResourceResolverService;
 import org.wso2.carbon.identity.role.mgt.core.RoleManagementService;
-import org.wso2.carbon.identity.secret.mgt.core.SecretsProcessor;
+import org.wso2.carbon.identity.secret.mgt.core.SecretManager;
+import org.wso2.carbon.identity.secret.mgt.core.SecretResolveManager;
 import org.wso2.carbon.idp.mgt.IdentityProviderManagementException;
 import org.wso2.carbon.idp.mgt.IdentityProviderManager;
 import org.wso2.carbon.idp.mgt.IdpManager;
@@ -383,20 +387,37 @@ public class IdPManagementServiceComponent {
     }
 
     @Reference(
-            name = "org.wso2.carbon.identity.secret.mgt.core.IdPSecretsProcessor",
-            service = SecretsProcessor.class,
+            name = "org.wso2.carbon.identity.secret.mgt.core.SecretManager",
+            service = SecretManager.class,
             cardinality = ReferenceCardinality.MANDATORY,
             policy = ReferencePolicy.DYNAMIC,
-            unbind = "unsetIdPSecretsProcessorService"
+            unbind = "unsetSecretManager"
     )
-    private void setIdPSecretsProcessorService(SecretsProcessor<IdentityProvider> idPSecretsProcessorService) {
+    private void setSecretManager(SecretManager secretManager) {
 
-        IdpMgtServiceComponentHolder.getInstance().setIdPSecretsProcessorService(idPSecretsProcessorService);
+        IdpMgtServiceComponentHolder.getInstance().setSecretManager(secretManager);
     }
 
-    private void unsetIdPSecretsProcessorService(SecretsProcessor<IdentityProvider> idPSecretsProcessorService) {
+    private void unsetSecretManager(SecretManager secretManager) {
 
-        IdpMgtServiceComponentHolder.getInstance().setIdPSecretsProcessorService(null);
+        IdpMgtServiceComponentHolder.getInstance().setSecretManager(null);
+    }
+
+    @Reference(
+            name = "org.wso2.carbon.identity.secret.mgt.core.SecretResolveManager",
+            service = SecretResolveManager.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetSecretResolveManager"
+    )
+    private void setSecretResolveManager(SecretResolveManager secretResolveManager) {
+
+        IdpMgtServiceComponentHolder.getInstance().setSecretResolveManager(secretResolveManager);
+    }
+
+    private void unsetSecretResolveManager(SecretResolveManager secretResolveManager) {
+
+        IdpMgtServiceComponentHolder.getInstance().setSecretResolveManager(null);
     }
 
     @Reference(
@@ -489,5 +510,56 @@ public class IdPManagementServiceComponent {
     protected void unsetClaimMetaMgtService(ClaimMetadataManagementService claimMetaMgtService) {
 
         IdpMgtServiceComponentHolder.getInstance().setClaimMetadataManagementService(null);
+    }
+
+    @Reference(
+            name = "action.management.service",
+            service = ActionManagementService.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetActionManagementService"
+    )
+    protected void setActionManagementService(ActionManagementService actionManagementService) {
+
+        IdpMgtServiceComponentHolder.getInstance().setActionManagementService(actionManagementService);
+    }
+
+    protected void unsetActionManagementService(ActionManagementService actionManagementService) {
+
+        IdpMgtServiceComponentHolder.getInstance().setActionManagementService(null);
+    }
+
+    @Reference(
+            name = "org.wso2.carbon.identity.organization.management.service",
+            service = OrganizationManager.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetOrganizationManager"
+    )
+    protected void setOrganizationManager(OrganizationManager organizationManager) {
+
+        IdpMgtServiceComponentHolder.getInstance().setOrganizationManager(organizationManager);
+    }
+
+    protected void unsetOrganizationManager(OrganizationManager organizationManager) {
+
+        IdpMgtServiceComponentHolder.getInstance().setOrganizationManager(null);
+    }
+
+    @Reference(
+            name = "org.wso2.carbon.identity.organization.resource.hierarchy.traverse.service",
+            service = OrgResourceResolverService.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetOrgResourceResolverService"
+    )
+    protected void setOrgResourceResolverService(OrgResourceResolverService orgResourceResolverService) {
+
+        IdpMgtServiceComponentHolder.getInstance().setOrgResourceResolverService(orgResourceResolverService);
+    }
+
+    protected void unsetOrgResourceResolverService(OrgResourceResolverService orgResourceResolverService) {
+
+        IdpMgtServiceComponentHolder.getInstance().setOrgResourceResolverService(null);
     }
 }

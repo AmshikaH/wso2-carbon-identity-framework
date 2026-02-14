@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2015-2025, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -18,22 +18,25 @@
 
 package org.wso2.carbon.identity.application.authentication.framework.internal;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.osgi.framework.BundleContext;
 import org.wso2.carbon.consent.mgt.core.ConsentManager;
-import org.wso2.carbon.identity.application.authentication.framework.ApplicationAuthenticator;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticationDataPublisher;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticationMethodNameTranslator;
 import org.wso2.carbon.identity.application.authentication.framework.JsFunctionRegistry;
 import org.wso2.carbon.identity.application.authentication.framework.ServerSessionManagementService;
+import org.wso2.carbon.identity.application.authentication.framework.UserDefinedAuthenticatorService;
 import org.wso2.carbon.identity.application.authentication.framework.config.loader.SequenceLoader;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.JSExecutionSupervisor;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.JsBaseGraphBuilderFactory;
+import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.JsGenericGraphBuilderFactory;
 import org.wso2.carbon.identity.application.authentication.framework.exception.FrameworkException;
 import org.wso2.carbon.identity.application.authentication.framework.handler.approles.ApplicationRolesResolver;
 import org.wso2.carbon.identity.application.authentication.framework.handler.claims.ClaimFilter;
 import org.wso2.carbon.identity.application.authentication.framework.handler.claims.impl.DefaultClaimFilter;
+import org.wso2.carbon.identity.application.authentication.framework.handler.orgdiscovery.OrganizationDiscoveryHandler;
 import org.wso2.carbon.identity.application.authentication.framework.handler.request.PostAuthenticationHandler;
 import org.wso2.carbon.identity.application.authentication.framework.handler.request.impl.consent.SSOConsentService;
 import org.wso2.carbon.identity.application.authentication.framework.handler.sequence.impl.AsyncSequenceExecutor;
@@ -54,6 +57,7 @@ import org.wso2.carbon.identity.multi.attribute.login.mgt.MultiAttributeLoginSer
 import org.wso2.carbon.identity.organization.management.service.OrganizationManagementInitialize;
 import org.wso2.carbon.identity.organization.management.service.OrganizationManager;
 import org.wso2.carbon.identity.role.v2.mgt.core.RoleManagementService;
+import org.wso2.carbon.identity.secret.mgt.core.SecretResolveManager;
 import org.wso2.carbon.identity.user.profile.mgt.association.federation.FederatedAssociationManager;
 import org.wso2.carbon.idp.mgt.IdpManager;
 import org.wso2.carbon.user.core.service.RealmService;
@@ -74,7 +78,6 @@ public class FrameworkServiceDataHolder {
     private static FrameworkServiceDataHolder instance = new FrameworkServiceDataHolder();
     private BundleContext bundleContext = null;
     private RealmService realmService = null;
-    private List<ApplicationAuthenticator> authenticators = new ArrayList<>();
     private List<ApplicationRolesResolver> applicationRolesResolvers = new ArrayList<>();
     private long nanoTimeReference = 0;
     private long unixTimeReference = 0;
@@ -83,7 +86,7 @@ public class FrameworkServiceDataHolder {
     private List<HttpIdentityResponseFactory> httpIdentityResponseFactories = new ArrayList<>();
     private AuthenticationDataPublisher authnDataPublisherProxy = null;
     private SequenceLoader sequenceLoader = null;
-    private JsBaseGraphBuilderFactory jsGraphBuilderFactory;
+    private JsGenericGraphBuilderFactory jsGraphBuilderFactory;
     private AuthenticationMethodNameTranslator authenticationMethodNameTranslator;
     private List<PostAuthenticationHandler> postAuthenticationHandlers = new ArrayList<>();
     private PostAuthenticationMgtService postAuthenticationMgtService = null;
@@ -97,6 +100,7 @@ public class FrameworkServiceDataHolder {
     private IdentityEventService identityEventService;
     private FunctionLibraryManagementService functionLibraryManagementService = null;
     private String requireCode = "";
+    private String secretsCode = StringUtils.EMPTY;
     private boolean userSessionMappingEnabled;
 
     /*
@@ -120,6 +124,9 @@ public class FrameworkServiceDataHolder {
     private boolean isOrganizationManagementEnable = false;
     private OrganizationManager organizationManager;
     private RoleManagementService roleManagementServiceV2;
+    private SecretResolveManager secretConfigManager;
+    private UserDefinedAuthenticatorService userDefinedAuthenticatorService;
+    private OrganizationDiscoveryHandler organizationDiscoveryHandler;
 
     private FrameworkServiceDataHolder() {
 
@@ -157,11 +164,6 @@ public class FrameworkServiceDataHolder {
     public void setBundleContext(BundleContext bundleContext) {
 
         this.bundleContext = bundleContext;
-    }
-
-    public List<ApplicationAuthenticator> getAuthenticators() {
-
-        return authenticators;
     }
 
     /**
@@ -284,10 +286,23 @@ public class FrameworkServiceDataHolder {
 
     public JsBaseGraphBuilderFactory getJsGraphBuilderFactory() {
 
+        if (jsGraphBuilderFactory instanceof JsBaseGraphBuilderFactory) {
+            return (JsBaseGraphBuilderFactory) jsGraphBuilderFactory;
+        }
+        return null;
+    }
+
+    public JsGenericGraphBuilderFactory getJsGenericGraphBuilderFactory() {
+
         return jsGraphBuilderFactory;
     }
 
     public void setJsGraphBuilderFactory(JsBaseGraphBuilderFactory jsGraphBuilderFactory) {
+
+        this.jsGraphBuilderFactory = jsGraphBuilderFactory;
+    }
+
+    public void setJsGenericGraphBuilderFactory(JsGenericGraphBuilderFactory jsGraphBuilderFactory) {
 
         this.jsGraphBuilderFactory = jsGraphBuilderFactory;
     }
@@ -535,6 +550,16 @@ public class FrameworkServiceDataHolder {
         this.functionLibraryManagementService = functionLibraryManagementService;
     }
 
+    public SecretResolveManager getSecretConfigManager() {
+
+        return secretConfigManager;
+    }
+
+    public void setSecretConfigManager(SecretResolveManager secretConfigManager) {
+
+        this.secretConfigManager = secretConfigManager;
+    }
+
     /**
      * Get require() function's code.
      *
@@ -553,6 +578,26 @@ public class FrameworkServiceDataHolder {
     public void setCodeForRequireFunction(String requireCode) {
 
         this.requireCode = requireCode;
+    }
+
+    /**
+     * Get secrets() function's code.
+     *
+     * @return code snippet of secrets()
+     */
+    public String getCodeForSecretsFunction() {
+
+        return secretsCode;
+    }
+
+    /**
+     * Set secrets() function's code.
+     *
+     * @param secretsCode code snippet of secrets() function
+     */
+    public void setCodeForSecretsFunction(String secretsCode) {
+
+        this.secretsCode = secretsCode;
     }
 
     /**
@@ -778,5 +823,35 @@ public class FrameworkServiceDataHolder {
     public void setRoleManagementServiceV2(RoleManagementService roleManagementServiceV2) {
 
         this.roleManagementServiceV2 = roleManagementServiceV2;
+    }
+
+    /**
+     * Set {@link UserDefinedAuthenticatorService}.
+     *
+     * @param userDefinedAuthenticatorService   Instance of {@link UserDefinedAuthenticatorService}.
+     */
+    public void setUserDefinedAuthenticatorService(UserDefinedAuthenticatorService userDefinedAuthenticatorService) {
+
+        this.userDefinedAuthenticatorService = userDefinedAuthenticatorService;
+    }
+
+    /**
+     * Get {@link UserDefinedAuthenticatorService}.
+     *
+     * @return Instance of {@link UserDefinedAuthenticatorService}.
+     */
+    public UserDefinedAuthenticatorService getUserDefinedAuthenticatorService() {
+
+        return userDefinedAuthenticatorService;
+    }
+
+    public OrganizationDiscoveryHandler getOrganizationDiscoveryHandler() {
+
+        return organizationDiscoveryHandler;
+    }
+
+    public void setOrganizationDiscoveryHandler(OrganizationDiscoveryHandler organizationDiscoveryHandler) {
+
+        this.organizationDiscoveryHandler = organizationDiscoveryHandler;
     }
 }

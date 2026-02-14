@@ -22,6 +22,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.json.JSONObject;
+import org.osgi.annotation.bundle.Capability;
 import org.wso2.carbon.CarbonConstants;
 import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.ServerSessionManagementService;
@@ -35,11 +36,17 @@ import org.wso2.carbon.identity.application.authentication.framework.util.Sessio
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 
-import static org.wso2.carbon.utils.CarbonUtils.isLegacyAuditLogsDisabled;
-
 /**
  * A service to terminate the sessions of federated users.
  */
+@Capability(
+        namespace = "osgi.service",
+        attribute = {
+                "objectClass=org.wso2.carbon.identity.application.authentication.framework." +
+                        "ServerSessionManagementService",
+                "service.scope=singleton"
+        }
+)
 public class ServerSessionManagementServiceImpl implements ServerSessionManagementService {
 
     private static Log log = LogFactory.getLog(ServerSessionManagementServiceImpl.class);
@@ -98,9 +105,6 @@ public class ServerSessionManagementServiceImpl implements ServerSessionManageme
     private void addAuditLogs(String sessionKey, String initiator, String authenticatedUser, String userTenantDomain,
                               String traceId, Long terminatedTimestamp) {
 
-        if (isLegacyAuditLogsDisabled()) {
-            return;
-        }
         String initiatedUser = null;
         JSONObject auditData = new JSONObject();
         auditData.put(SessionMgtConstants.SESSION_CONTEXT_ID, sessionKey);

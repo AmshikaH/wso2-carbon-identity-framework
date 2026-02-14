@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2023-2024, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -26,6 +26,7 @@ import org.wso2.carbon.identity.role.v2.mgt.core.model.IdpGroup;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.Permission;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.Role;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.RoleBasicInfo;
+import org.wso2.carbon.identity.role.v2.mgt.core.model.RoleDTO;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.UserBasicInfo;
 
 import java.util.List;
@@ -229,6 +230,26 @@ public interface RoleDAO {
     List<UserBasicInfo> getUserListOfRole(String roleId, String tenantDomain) throws IdentityRoleManagementException;
 
     /**
+     * Get user list of the given role filter.
+     *
+     * @param expressionNodes List of expressionNodes.
+     * @param limit           Limit value.
+     * @param offset          Offset value.
+     * @param sortBy          SortBy value.
+     * @param sortOrder       Sort order value.
+     * @param tenantDomain    Tenant domain.
+     * @param userStoreDomain User store domain.
+     * @return List of users.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    default List<UserBasicInfo> getUserListOfRoles(List<ExpressionNode> expressionNodes, Integer limit, Integer offset,
+                                                   String sortBy, String sortOrder, String tenantDomain,
+                                                   String userStoreDomain) throws IdentityRoleManagementException {
+
+        throw new NotImplementedException("getUserListOfRoles method is not implemented");
+    }
+
+    /**
      * Update the list of groups in the given role.
      *
      * @param roleId             Role ID.
@@ -332,6 +353,16 @@ public interface RoleDAO {
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     int getRolesCount(String tenantDomain) throws IdentityRoleManagementException;
+
+    /**
+     * Retrieve available total roles count in a tenant for a given specific search filter.
+     *
+     * @param expressionNodes List of expressionNodes.
+     * @param tenantDomain    Tenant domain.
+     * @return The list count of roles.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    int getRolesCount(List<ExpressionNode> expressionNodes, String tenantDomain) throws IdentityRoleManagementException;
 
     /**
      * Get role without users.
@@ -441,6 +472,20 @@ public interface RoleDAO {
             throws IdentityRoleManagementException;
 
     /**
+     * Get shared role to main role mappings by subOrg.
+     *
+     * @param roleIds            Shared role IDs.
+     * @param subOrgTenantDomain Sub Organization tenant domain.
+     * @return The map of shared role id to main roles.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    default Map<String, String> getSharedRoleToMainRoleMappingsBySubOrg(List<String> roleIds, String subOrgTenantDomain)
+            throws IdentityRoleManagementException {
+
+        throw new NotImplementedException("getSharedRoleToMainRoleMappingsBySubOrg method is not implemented");
+    }
+
+    /**
      * Get associated applications by role id.
      *
      * @param roleId       Role Id.
@@ -460,4 +505,29 @@ public interface RoleDAO {
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     int getRoleAudienceRefId(String audience, String audienceId) throws IdentityRoleManagementException;
+
+    /**
+     * Get shared hybrid roles for the given main role ID.
+     *
+     * @param roleId   The main role ID.
+     * @param tenantId The tenant ID.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    default List<RoleDTO> getSharedHybridRoles(String roleId, int tenantId) throws IdentityRoleManagementException {
+
+        return null;
+    }
+
+    /**
+     * Check whether the given role is a shared role in the given tenant.
+     *
+     * @param roleId       The role ID of the tenant.
+     * @param tenantDomain The tenant domain.
+     * @return True if the role is a shared role.
+     * @throws IdentityRoleManagementException If an error occurs while checking the shared role.
+     */
+    default boolean isSharedRole(String roleId, String tenantDomain) throws IdentityRoleManagementException {
+
+        return false;
+    }
 }

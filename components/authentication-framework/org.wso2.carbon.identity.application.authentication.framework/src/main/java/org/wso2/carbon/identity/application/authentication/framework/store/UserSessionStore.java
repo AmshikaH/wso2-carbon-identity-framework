@@ -26,6 +26,7 @@ import org.wso2.carbon.database.utils.jdbc.exceptions.TransactionException;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthHistory;
 import org.wso2.carbon.identity.application.authentication.framework.exception.DuplicatedAuthUserException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.UserSessionException;
+import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.authentication.framework.util.SessionMgtConstants;
 import org.wso2.carbon.identity.application.common.model.User;
@@ -46,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.LOCAL_IDP_NAME;
 
 /**
  * Class to store and retrieve user related data.
@@ -298,7 +301,10 @@ public class UserSessionStore {
     public int getIdPId(String idpName, int tenantId) throws UserSessionException {
 
         int idPId = -1;
-        if (idpName.equals("LOCAL")) {
+        if (StringUtils.isBlank(idpName)) {
+            throw new UserSessionException("Blank IDP Name is provided to retrieve IdP id of tenant ID: " + tenantId);
+        }
+        if (StringUtils.equals(LOCAL_IDP_NAME, idpName)) {
             return idPId;
         }
         try (Connection connection = IdentityDatabaseUtil.getDBConnection(false)) {
@@ -338,10 +344,21 @@ public class UserSessionStore {
                 if (log.isDebugEnabled()) {
                     log.debug("Stored user session data for user " + userId + " with session id: " + sessionId);
                 }
+            } catch (SQLIntegrityConstraintViolationException e1) {
+                IdentityDatabaseUtil.rollbackTransaction(connection);
+                throw new DuplicatedAuthUserException("Mapping between user Id: " + userId + " and session Id: "
+                        + sessionId + " already exists in the database.", e1);
             } catch (SQLException e1) {
                 IdentityDatabaseUtil.rollbackTransaction(connection);
-                throw new UserSessionException("Error while storing mapping between user Id: " + userId +
-                        " and session Id: " + sessionId, e1);
+                // Handle constrain violation issue in JDBC drivers which does not throw
+                // SQLIntegrityConstraintViolationException
+                if (StringUtils.containsIgnoreCase(e1.getMessage(), "USER_SESSION_STORE_CONSTRAINT")) {
+                    throw new DuplicatedAuthUserException("Mapping between user Id: " + userId + " and session Id: "
+                            + sessionId + " already exists in the database.", e1);
+                } else {
+                    throw new UserSessionException("Error while storing mapping between user Id: " + userId +
+                            " and session Id: " + sessionId, e1);
+                }
             }
         } catch (SQLException e) {
             throw new UserSessionException("Error while storing mapping between user Id: " + userId +
@@ -1266,24 +1283,32 @@ public class UserSessionStore {
      */
     public int getActiveSessionCount(String tenantDomain) throws UserSessionException {
 
-        int activeSessionCount = 0;
+        Set<String> activeSessionIds = new HashSet<>();
         int tenantId = IdentityTenantUtil.getTenantId(tenantDomain);
         long idleSessionTimeOut = TimeUnit.SECONDS.toMillis(IdPManagementUtil.getIdleSessionTimeOut(tenantDomain));
         long currentTime = System.currentTimeMillis();
         long minTimestamp = currentTime - idleSessionTimeOut;
 
-        try (Connection connection = IdentityDatabaseUtil.getSessionDBConnection(false)) {
+        try (Connection connection = IdentityDatabaseUtil.getSessionDBConnection(true)) {
             String sqlStmt = JdbcUtils.isH2DB(JdbcUtils.Database.SESSION)
-                    ? SQLQueries.SQL_GET_ACTIVE_SESSION_COUNT_BY_TENANT_H2
-                    : SQLQueries.SQL_GET_ACTIVE_SESSION_COUNT_BY_TENANT;
+                    ? SQLQueries.SQL_GET_SESSION_OPERATIONS_WITHIN_IDLE_SESSION_TIMEOUT_BY_TENANT_H2
+                    : SQLQueries.SQL_GET_SESSION_OPERATIONS_WITHIN_IDLE_SESSION_TIMEOUT_BY_TENANT;
             try (PreparedStatement preparedStatement = connection.prepareStatement(sqlStmt)) {
-                preparedStatement.setString(1, SessionMgtConstants.LAST_ACCESS_TIME);
-                preparedStatement.setString(2, String.valueOf(minTimestamp));
-                preparedStatement.setString(3, String.valueOf(currentTime));
-                preparedStatement.setInt(4, tenantId);
+                preparedStatement.setInt(1, tenantId);
+                preparedStatement.setString(2, SessionMgtConstants.LAST_ACCESS_TIME);
+                preparedStatement.setString(3, String.valueOf(minTimestamp));
+                preparedStatement.setString(4, String.valueOf(currentTime));
                 try (ResultSet resultSet = preparedStatement.executeQuery()) {
-                    if (resultSet.next()) {
-                        activeSessionCount = resultSet.getInt(1);
+                    while (resultSet.next()) {
+                        String sessionId = resultSet.getString(1);
+                        String operation = resultSet.getString(2);
+
+                        if (StringUtils.equalsIgnoreCase(operation, "DELETE")) {
+                            // If the session is already logged out, remove it from the active session set.
+                            activeSessionIds.remove(sessionId);
+                            continue;
+                        }
+                        activeSessionIds.add(sessionId);
                     }
                 }
                 IdentityDatabaseUtil.commitTransaction(connection);
@@ -1292,7 +1317,7 @@ public class UserSessionStore {
             throw new UserSessionException("Error while retrieving active session count of the tenant domain, " +
                     tenantDomain, e);
         }
-        return activeSessionCount;
+        return activeSessionIds.size();
     }
 
     /**
@@ -1309,5 +1334,39 @@ public class UserSessionStore {
 
         // When federated user is stored, the userDomain is added as "FEDERATED" to the store.
         return getUserId(subjectIdentifier, tenantId, FEDERATED_USER_DOMAIN, idPId);
+    }
+
+    /**
+     * Method to retrieve user and associated IDP available in the IDN_AUTH_USER table.
+     *
+     * @param userId Id of the authenticated user
+     * @return the user and associated IDP
+     * @throws UserSessionException if an error occurs when retrieving the mapping from the database
+     */
+    public AuthenticatedUser getUser(String userId) throws UserSessionException {
+
+        if (StringUtils.isBlank(userId)) {
+            throw new UserSessionException("Invalid userId: userId cannot be null or empty.");
+        }
+
+        AuthenticatedUser user = null;
+        try (Connection connection = IdentityDatabaseUtil.getDBConnection(false)) {
+            try (PreparedStatement preparedStatement = connection
+                    .prepareStatement(SQLQueries.SQL_SELECT_USER_FROM_USER_ID)) {
+                preparedStatement.setString(1, userId);
+                try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                    if (resultSet.next()) {
+                        user = new AuthenticatedUser();
+                        user.setUserName(resultSet.getString(1));
+                        user.setTenantDomain(IdentityTenantUtil.getTenantDomain(resultSet.getInt(2)));
+                        user.setUserStoreDomain(resultSet.getString(3));
+                        user.setFederatedIdPName(resultSet.getString(4));
+                    }
+                }
+            }
+            return user;
+        } catch (SQLException e) {
+            throw new UserSessionException("Error while retrieving information of user id: " + userId, e);
+        }
     }
 }

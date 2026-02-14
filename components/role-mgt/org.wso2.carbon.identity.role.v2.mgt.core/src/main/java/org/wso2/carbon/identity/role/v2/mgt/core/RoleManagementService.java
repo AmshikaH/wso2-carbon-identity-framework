@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2023-2024, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -25,6 +25,7 @@ import org.wso2.carbon.identity.role.v2.mgt.core.model.IdpGroup;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.Permission;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.Role;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.RoleBasicInfo;
+import org.wso2.carbon.identity.role.v2.mgt.core.model.RoleDTO;
 import org.wso2.carbon.identity.role.v2.mgt.core.model.UserBasicInfo;
 
 import java.util.List;
@@ -43,8 +44,8 @@ public interface RoleManagementService {
      * @param userList     List of users IDs.
      * @param groupList    List of groups IDs.
      * @param permissions  List of permissions.
-     * @param audience  Audience.
-     * @param audienceId  Audience ID.
+     * @param audience     Audience.
+     * @param audienceId   Audience ID.
      * @param tenantDomain Tenant domain.
      * @return Basic role object.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
@@ -80,7 +81,7 @@ public interface RoleManagementService {
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     default List<Role> getRoles(Integer limit, Integer offset, String sortBy, String sortOrder, String tenantDomain,
-                                            List<String> requiredAttributes) throws IdentityRoleManagementException {
+                                List<String> requiredAttributes) throws IdentityRoleManagementException {
 
         throw new NotImplementedException("getRoles method is not implemented");
     }
@@ -98,7 +99,7 @@ public interface RoleManagementService {
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     List<RoleBasicInfo> getRoles(String filter, Integer limit, Integer offset, String sortBy, String sortOrder,
-                                                                        String tenantDomain)
+                                 String tenantDomain)
             throws IdentityRoleManagementException;
 
     /**
@@ -134,7 +135,7 @@ public interface RoleManagementService {
     /**
      * Retrieve the given role.
      *
-     * @param roleId       Role ID.
+     * @param roleId Role ID.
      * @return The role object.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -180,6 +181,26 @@ public interface RoleManagementService {
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     List<UserBasicInfo> getUserListOfRole(String roleId, String tenantDomain) throws IdentityRoleManagementException;
+
+    /**
+     * Get user list of the given role filtered by the provided expression nodes.
+     *
+     * @param filter          Role filter.
+     * @param limit           Limit value.
+     * @param offset          Offset value.
+     * @param sortBy          SortBy value.
+     * @param sortOrder       Sort order value.
+     * @param tenantDomain    Tenant domain.
+     * @param userStoreDomain User store domain.
+     * @return List of users.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    default List<UserBasicInfo> getUserListOfRoles(String filter, Integer limit, Integer offset, String sortBy,
+                                                   String sortOrder, String tenantDomain, String userStoreDomain)
+            throws IdentityRoleManagementException {
+
+        throw new NotImplementedException("getUserListOfRoles method is not implemented");
+    }
 
     /**
      * Update the list of users in the given role.
@@ -230,10 +251,10 @@ public interface RoleManagementService {
     /**
      * Update the list of idp groups in the given role.
      *
-     * @param roleId             Role ID.
+     * @param roleId           Role ID.
      * @param newGroupList     The set of new groups.
      * @param deletedGroupList The set of deleted groups.
-     * @param tenantDomain       Tenant domain.
+     * @param tenantDomain     Tenant domain.
      * @return Basic role object.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -253,14 +274,13 @@ public interface RoleManagementService {
     /**
      * Get permission list of the given role ids.
      *
-     * @param roleIds       Role IDs.
+     * @param roleIds      Role IDs.
      * @param tenantDomain Tenant domain.
      * @return List of permissions.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     List<String> getPermissionListOfRoles(List<String> roleIds, String tenantDomain)
             throws IdentityRoleManagementException;
-
 
     /**
      * Get permission list of the given role.
@@ -271,7 +291,7 @@ public interface RoleManagementService {
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     RoleBasicInfo updatePermissionListOfRole(String roleId, List<Permission> addedPermissions,
-                                                List<Permission> deletedPermissions, String tenantDomain)
+                                             List<Permission> deletedPermissions, String tenantDomain)
             throws IdentityRoleManagementException;
 
     /**
@@ -300,7 +320,7 @@ public interface RoleManagementService {
      *
      * @return A set of system roles.
      */
-     Set<String> getSystemRoles();
+    Set<String> getSystemRoles();
 
     /**
      * Retrieve the count of tenant roles.
@@ -308,13 +328,22 @@ public interface RoleManagementService {
      * @param tenantDomain tenant domain.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
-     int getRolesCount(String tenantDomain) throws IdentityRoleManagementException;
+    int getRolesCount(String tenantDomain) throws IdentityRoleManagementException;
+
+    /**
+     * Retrieve available total roles count in a tenant for a given specific search filter.
+     *
+     * @param tenantDomain Tenant domain.
+     * @return The list count of roles.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    int getRolesCount(String searchFilter, String tenantDomain) throws IdentityRoleManagementException;
 
     /**
      * Get role without users.
      *
-     * @param roleId          Role ID.
-     * @param tenantDomain    Tenant domain.
+     * @param roleId       Role ID.
+     * @param tenantDomain Tenant domain.
      * @return The role object without users.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -333,9 +362,9 @@ public interface RoleManagementService {
     /**
      * Get Role id by name.
      *
-     * @param roleName       Role Id.
-     * @param audience  Audience.
-     * @param audienceId  Audience ID.
+     * @param roleName     Role Id.
+     * @param audience     Audience.
+     * @param audienceId   Audience ID.
      * @param tenantDomain Tenant Domain.
      * @return Role name for the given role id.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
@@ -358,8 +387,8 @@ public interface RoleManagementService {
     /**
      * Get role list of user.
      *
-     * @param userId          User ID.
-     * @param tenantDomain    Tenant domain.
+     * @param userId       User ID.
+     * @param tenantDomain Tenant domain.
      * @return The list of basic role object.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -368,8 +397,8 @@ public interface RoleManagementService {
     /**
      * Get role list of groups.
      *
-     * @param groupIds        Group IDs.
-     * @param tenantDomain    Tenant domain.
+     * @param groupIds     Group IDs.
+     * @param tenantDomain Tenant domain.
      * @return The list of basic role object.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -379,8 +408,8 @@ public interface RoleManagementService {
     /**
      * Get role list of idp groups.
      *
-     * @param groupIds        Idp Group IDs.
-     * @param tenantDomain    Tenant domain.
+     * @param groupIds     Idp Group IDs.
+     * @param tenantDomain Tenant domain.
      * @return The list of basic role object.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -390,8 +419,8 @@ public interface RoleManagementService {
     /**
      * Get role id list of user.
      *
-     * @param userId          User ID.
-     * @param tenantDomain    Tenant domain.
+     * @param userId       User ID.
+     * @param tenantDomain Tenant domain.
      * @return The list of role id.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -400,8 +429,8 @@ public interface RoleManagementService {
     /**
      * Get role id list of groups.
      *
-     * @param groupIds        Group IDs.
-     * @param tenantDomain    Tenant domain.
+     * @param groupIds     Group IDs.
+     * @param tenantDomain Tenant domain.
      * @return The list of role id.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -411,8 +440,8 @@ public interface RoleManagementService {
     /**
      * Get role id list of idp groups.
      *
-     * @param groupIds        Idp Group IDs.
-     * @param tenantDomain    Tenant domain.
+     * @param groupIds     Idp Group IDs.
+     * @param tenantDomain Tenant domain.
      * @return The list of role id.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
@@ -422,8 +451,8 @@ public interface RoleManagementService {
     /**
      * Delete all roles associated app by id.
      *
-     * @param applicationId        Idp Group IDs.
-     * @param tenantDomain    Tenant domain.
+     * @param applicationId Idp Group IDs.
+     * @param tenantDomain  Tenant domain.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     void deleteRolesByApplication(String applicationId, String tenantDomain) throws IdentityRoleManagementException;
@@ -431,13 +460,27 @@ public interface RoleManagementService {
     /**
      * Get main role to shared role mappings by subOrg.
      *
-     * @param roleIds        Main role IDs.
+     * @param roleIds            Main role IDs.
      * @param subOrgTenantDomain Sub Organization tenant domain.
      * @return The map of main role id to shared roles.
      * @throws IdentityRoleManagementException IdentityRoleManagementException.
      */
     Map<String, String> getMainRoleToSharedRoleMappingsBySubOrg(List<String> roleIds, String subOrgTenantDomain)
             throws IdentityRoleManagementException;
+
+    /**
+     * Get shared role to main role mappings by subOrg.
+     *
+     * @param roleIds            Shared role IDs.
+     * @param subOrgTenantDomain Sub Organization tenant domain.
+     * @return The map of shared role id to main roles.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    default Map<String, String> getSharedRoleToMainRoleMappingsBySubOrg(List<String> roleIds, String subOrgTenantDomain)
+            throws IdentityRoleManagementException {
+
+        throw new NotImplementedException("getSharedRoleToMainRoleMappingsBySubOrg method is not implemented");
+    }
 
     /**
      * Get associated applications by role id.
@@ -449,4 +492,16 @@ public interface RoleManagementService {
      */
     List<String> getAssociatedApplicationByRoleId(String roleId, String tenantDomain)
             throws IdentityRoleManagementException;
+
+    /**
+     * Get shared hybrid roles for the given main role ID.
+     *
+     * @param roleId   The main role ID.
+     * @param tenantId The tenant ID.
+     * @throws IdentityRoleManagementException IdentityRoleManagementException.
+     */
+    default List<RoleDTO> getSharedHybridRoles(String roleId, int tenantId) throws IdentityRoleManagementException {
+
+        return null;
+    }
 }

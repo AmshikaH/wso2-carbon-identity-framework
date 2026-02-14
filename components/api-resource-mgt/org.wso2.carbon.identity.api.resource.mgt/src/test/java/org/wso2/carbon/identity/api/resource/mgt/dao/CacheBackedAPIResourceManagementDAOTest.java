@@ -20,10 +20,8 @@ package org.wso2.carbon.identity.api.resource.mgt.dao;
 
 import org.apache.commons.dbcp.BasicDataSource;
 import org.apache.commons.lang.StringUtils;
+import org.mockito.MockedStatic;
 import org.mockito.stubbing.Answer;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.testng.PowerMockTestCase;
 import org.testng.Assert;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -32,13 +30,13 @@ import org.testng.annotations.Test;
 import org.wso2.carbon.base.CarbonBaseConstants;
 import org.wso2.carbon.identity.api.resource.mgt.dao.impl.APIResourceManagementDAOImpl;
 import org.wso2.carbon.identity.api.resource.mgt.dao.impl.CacheBackedAPIResourceMgtDAO;
-import org.wso2.carbon.identity.api.resource.mgt.util.APIResourceManagementUtil;
+import org.wso2.carbon.identity.api.resource.mgt.internal.APIResourceManagementServiceComponentHolder;
 import org.wso2.carbon.identity.application.common.model.APIResource;
 import org.wso2.carbon.identity.application.common.model.Scope;
 import org.wso2.carbon.identity.core.model.ExpressionNode;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
-import org.wso2.carbon.identity.core.util.IdentityUtil;
+import org.wso2.carbon.identity.organization.management.service.util.OrganizationManagementUtil;
 
 import java.nio.file.Paths;
 import java.sql.Connection;
@@ -49,16 +47,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.sql.DataSource;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.powermock.api.mockito.PowerMockito.mockStatic;
-import static org.powermock.api.mockito.PowerMockito.when;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.mockStatic;
 
-@PrepareForTest({IdentityDatabaseUtil.class, IdentityTenantUtil.class, IdentityUtil.class, DataSource.class,
-        APIResourceManagementUtil.class})
-public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
+public class CacheBackedAPIResourceManagementDAOTest {
 
     private static final int TENANT_ID = 2;
     private static final String TENANT_DOMAIN = "carbon.super";
@@ -77,10 +71,8 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
         APIResourceManagementDAOImpl apiResourceManagementDAO = new APIResourceManagementDAOImpl();
         daoImpl = new CacheBackedAPIResourceMgtDAO(apiResourceManagementDAO);
         initiateH2Database(getFilePath());
-        mockStatic(IdentityTenantUtil.class);
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
 
+        APIResourceManagementServiceComponentHolder.getInstance().setRichAuthorizationRequestsEnabled(true);
 
         // Add initial API resources.
         addAPIResourceToDB("Setup-1", getConnection(), TENANT_ID);
@@ -113,10 +105,15 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     public void testGetAPIResourcesCount(Integer tenantId, List<ExpressionNode> expressionNodes, int expected)
             throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-        Assert.assertEquals(daoImpl.getAPIResourcesCount(tenantId, expressionNodes).intValue(), expected);
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+            organizationManagementUtil.when(() -> OrganizationManagementUtil.isOrganization(anyInt()))
+                    .thenReturn(false);
+            Assert.assertEquals(daoImpl.getAPIResourcesCount(tenantId, expressionNodes).intValue(), expected);
+        }
     }
 
     @DataProvider
@@ -132,10 +129,15 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     public void testGetAPIResources(Integer limit, Integer tenantId, String sortOrder,
                                     List<ExpressionNode> expressionNodes, int count) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-        Assert.assertEquals(daoImpl.getAPIResources(limit, tenantId, sortOrder, expressionNodes).size(), count);
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+            organizationManagementUtil.when(() -> OrganizationManagementUtil.isOrganization(anyInt()))
+                    .thenReturn(false);
+            Assert.assertEquals(daoImpl.getAPIResources(limit, tenantId, sortOrder, expressionNodes).size(), count);
+        }
     }
 
     @DataProvider
@@ -149,14 +151,19 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "addAPIResourceData", priority = 2)
     public void testAddAPIResource(String postfix, int tenantId) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-        APIResource apiResource = createAPIResource(postfix);
-        APIResource createdAPIResource = daoImpl.addAPIResource(apiResource, tenantId);
-        Assert.assertNotNull(createdAPIResource);
-        Assert.assertTrue(createdAPIResource.getName().contains(postfix));
-        Assert.assertNotNull(createdAPIResource.getId());
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+            organizationManagementUtil.when(() -> OrganizationManagementUtil.isOrganization(anyInt()))
+                    .thenReturn(false);
+            APIResource apiResource = createAPIResource(postfix);
+            APIResource createdAPIResource = daoImpl.addAPIResource(apiResource, tenantId);
+            Assert.assertNotNull(createdAPIResource);
+            Assert.assertTrue(createdAPIResource.getName().contains(postfix));
+            Assert.assertNotNull(createdAPIResource.getId());
+        }
     }
 
     @DataProvider
@@ -171,15 +178,18 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "getScopesByAPIData", priority = 3)
     public void testGetScopesByAPI(String name, Integer tenantId, int expected) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-
-        String apiId = addAPIResourceToDB(name, getConnection(), tenantId).getId();
-        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(getConnection());
-        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
-        Assert.assertEquals(daoImpl.getScopesByAPI(apiId, TENANT_ID).size(), expected);
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            String apiId = addAPIResourceToDB(name, getConnection(), tenantId, identityDatabaseUtil,
+                    organizationManagementUtil).getId();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(true)).thenReturn(getConnection());
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
+            Assert.assertEquals(daoImpl.getScopesByAPI(apiId, TENANT_ID).size(), expected);
+        }
     }
 
     @DataProvider
@@ -193,16 +203,19 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "isAPIResourceExistData", priority = 4)
     public void testIsAPIResourceExist(String identifierPostFix, Integer tenantId, boolean expected) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-
-        addAPIResourceToDB(identifierPostFix, getConnection(), tenantId);
-        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(getConnection());
-        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
-        Assert.assertEquals(daoImpl.isAPIResourceExist(API_RESOURCE_IDENTIFIER + identifierPostFix, TENANT_ID),
-                expected);
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            addAPIResourceToDB(identifierPostFix, getConnection(), tenantId, identityDatabaseUtil,
+                    organizationManagementUtil);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(true)).thenReturn(getConnection());
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
+            Assert.assertEquals(daoImpl.isAPIResourceExist(API_RESOURCE_IDENTIFIER + identifierPostFix, TENANT_ID),
+                    expected);
+        }
     }
 
     @DataProvider
@@ -216,16 +229,20 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "isAPIResourceExistByIdData", priority = 5)
     public void testIsAPIResourceExistById(Integer tenantId, boolean expected) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-
-        APIResource apiresource = addAPIResourceToDB("testIsAPIResourceExistById", getConnection(), tenantId);
-        String apiId = apiresource.getId();
-        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(getConnection());
-        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
-        Assert.assertEquals(daoImpl.isAPIResourceExistById(apiId, TENANT_ID), expected);
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            APIResource apiresource =
+                    addAPIResourceToDB("testIsAPIResourceExistById", getConnection(), tenantId, identityDatabaseUtil,
+                            organizationManagementUtil);
+            String apiId = apiresource.getId();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(true)).thenReturn(getConnection());
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
+            Assert.assertEquals(daoImpl.isAPIResourceExistById(apiId, TENANT_ID), expected);
+        }
     }
 
     @DataProvider
@@ -239,17 +256,24 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "getAPIResourceByIdData", priority = 6)
     public void testGetAPIResourceById(Integer tenantId, boolean expected) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        when(IdentityTenantUtil.getTenantDomain(tenantId)).thenReturn(getTenantDomain(tenantId));
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
 
-        String apiId = addAPIResourceToDB("testGetAPIResourceById", getConnection(), tenantId).getId();
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(tenantId))
+                    .thenReturn(getTenantDomain(tenantId));
 
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
+            String apiId = addAPIResourceToDB("testGetAPIResourceById", getConnection(), tenantId,
+                    identityDatabaseUtil, organizationManagementUtil).getId();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
 
-        Assert.assertEquals(daoImpl.getAPIResourceById(apiId, TENANT_ID) != null, expected);
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
+
+            Assert.assertEquals(daoImpl.getAPIResourceById(apiId, TENANT_ID) != null, expected);
+        }
     }
 
     @DataProvider
@@ -263,13 +287,15 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "isScopeExistByIdData", priority = 7)
     public void testIsScopeExistById(Integer tenantId, boolean expected) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-
-        String scopeId = addAPIResourceToDB("testIsScopeExistById", getConnection(), tenantId)
-                .getScopes().get(0).getId();
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-        Assert.assertEquals(daoImpl.isScopeExistById(scopeId, TENANT_ID), expected);
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            String scopeId = addAPIResourceToDB("testIsScopeExistById", getConnection(), tenantId,
+                    identityDatabaseUtil, organizationManagementUtil).getScopes().get(0).getId();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+            Assert.assertEquals(daoImpl.isScopeExistById(scopeId, TENANT_ID), expected);
+        }
     }
 
     @DataProvider
@@ -283,25 +309,33 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "deleteAPIResourceByIdData", priority = 8)
     public void testDeleteAPIResourceById(Integer tenantId, boolean expected) throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        when(IdentityTenantUtil.getTenantDomain(tenantId)).thenReturn(getTenantDomain(tenantId));
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
 
-        String apiId = addAPIResourceToDB("testDeleteAPIResourceById", getConnection(), tenantId).getId();
-        Connection connection = getConnection();
-        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
-        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(tenantId))
+                    .thenReturn(getTenantDomain(tenantId));
 
-        PowerMockito.doAnswer((Answer<Void>) invocation -> {
-            connection.commit();
-            return null;
-        }).when(IdentityDatabaseUtil.class, "commitTransaction", any(Connection.class));
+            String apiId = addAPIResourceToDB("testDeleteAPIResourceById", getConnection(), tenantId,
+                    identityDatabaseUtil, organizationManagementUtil).getId();
+            Connection connection = getConnection();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
 
-        daoImpl.deleteAPIResourceById(apiId, tenantId);
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-        when(IdentityTenantUtil.getTenantDomain(tenantId)).thenReturn(getTenantDomain(tenantId));
-        Assert.assertEquals(daoImpl.isAPIResourceExistById(apiId, tenantId), expected);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.commitTransaction(any(Connection.class)))
+                    .thenAnswer((Answer<Void>) invocation -> {
+                        connection.commit();
+                        return null;
+                    });
+
+            daoImpl.deleteAPIResourceById(apiId, tenantId);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(tenantId))
+                    .thenReturn(getTenantDomain(tenantId));
+            Assert.assertEquals(daoImpl.isAPIResourceExistById(apiId, tenantId), expected);
+        }
     }
 
     @DataProvider
@@ -314,13 +348,16 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
 
     @Test(dataProvider = "isScopeExistByNameData", priority = 9)
     public void testIsScopeExistByName(Integer tenantId, String scopeName, boolean expected) throws Exception {
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
 
-        addAPIResourceToDB(scopeName, getConnection(), tenantId);
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            addAPIResourceToDB(scopeName, getConnection(), tenantId, identityDatabaseUtil, organizationManagementUtil);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
 
-        Assert.assertEquals(daoImpl.isScopeExistByName(TEST_SCOPE_1 + scopeName, TENANT_ID), expected);
+            Assert.assertEquals(daoImpl.isScopeExistByName(TEST_SCOPE_1 + scopeName, TENANT_ID), expected);
+        }
     }
 
     @DataProvider
@@ -334,101 +371,131 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
     @Test(dataProvider = "getScopeByNameAndTenantIdData", priority = 10)
     public void testGetScopeByNameAndTenantId(Integer tenantId, String scopeName, String expectedName)
             throws Exception {
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
 
-        addAPIResourceToDB(scopeName, getConnection(), tenantId);
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-        Scope scope = daoImpl.getScopeByNameAndTenantId(TEST_SCOPE_1 + scopeName, tenantId);
-        Assert.assertEquals(scope.getName(), TEST_SCOPE_1 + expectedName);
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            addAPIResourceToDB(scopeName, getConnection(), tenantId, identityDatabaseUtil, organizationManagementUtil);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+            Scope scope = daoImpl.getScopeByNameAndTenantId(TEST_SCOPE_1 + scopeName, tenantId);
+            Assert.assertEquals(scope.getName(), TEST_SCOPE_1 + expectedName);
+        }
     }
 
     @Test(priority = 11)
     public void testAddScopes() throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
 
-        APIResource apiResource = addAPIResourceToDB("testAddScopes", getConnection(), TENANT_ID);
-        String apiId = apiResource.getId();
-        List<Scope> scopes = Arrays.asList(createScope("scope1"), createScope("scope2"));
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
 
-        Connection connection = getConnection();
-        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
-        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
+            APIResource apiResource =
+                    addAPIResourceToDB("testAddScopes", getConnection(), TENANT_ID, identityDatabaseUtil,
+                            organizationManagementUtil);
+            String apiId = apiResource.getId();
+            List<Scope> scopes = Arrays.asList(createScope("scope1"), createScope("scope2"));
 
-        PowerMockito.doAnswer((Answer<Void>) invocation -> {
-            connection.commit();
-            return null;
-        }).when(IdentityDatabaseUtil.class, "commitTransaction", any(Connection.class));
+            Connection connection = getConnection();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
 
-        daoImpl.addScopes(scopes, apiId, TENANT_ID);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.commitTransaction(any(Connection.class)))
+                    .thenAnswer((Answer<Void>) invocation -> {
+                        connection.commit();
+                        return null;
+                    });
 
-        for (Scope scope : scopes) {
-            when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-            when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
-            Assert.assertTrue(daoImpl.isScopeExistByName(scope.getName(), TENANT_ID));
+            daoImpl.addScopes(scopes, apiId, TENANT_ID);
+
+            for (Scope scope : scopes) {
+                identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                        .thenReturn(getConnection());
+                identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                        .thenReturn(getTenantDomain(TENANT_ID));
+                Assert.assertTrue(daoImpl.isScopeExistByName(scope.getName(), TENANT_ID));
+            }
         }
     }
 
     @Test(priority = 12)
     public void testDeleteAllScopes() throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
 
-        APIResource apiResource = addAPIResourceToDB("testDeleteAllScopes", getConnection(), TENANT_ID);
-        String apiId = apiResource.getId();
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
 
-        Connection connection = getConnection();
-        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
-        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
+            APIResource apiResource =
+                    addAPIResourceToDB("testDeleteAllScopes", getConnection(), TENANT_ID, identityDatabaseUtil,
+                            organizationManagementUtil);
+            String apiId = apiResource.getId();
 
-        PowerMockito.doAnswer((Answer<Void>) invocation -> {
-            connection.commit();
-            return null;
-        }).when(IdentityDatabaseUtil.class, "commitTransaction", any(Connection.class));
+            Connection connection = getConnection();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
 
-        daoImpl.deleteAllScopes(apiId, TENANT_ID);
-        for (Scope scope : apiResource.getScopes()) {
-            when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-            when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
-            Assert.assertFalse(daoImpl.isScopeExistById(scope.getId(), TENANT_ID));
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.commitTransaction(any(Connection.class)))
+                    .thenAnswer((Answer<Void>) invocation -> {
+                        connection.commit();
+                        return null;
+                    });
+
+            daoImpl.deleteAllScopes(apiId, TENANT_ID);
+            for (Scope scope : apiResource.getScopes()) {
+                identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                        .thenReturn(getConnection());
+                identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                        .thenReturn(getTenantDomain(TENANT_ID));
+                Assert.assertFalse(daoImpl.isScopeExistById(scope.getId(), TENANT_ID));
+            }
         }
     }
 
     @Test(priority = 13)
     public void testDeleteScope() throws Exception {
 
-        mockStatic(IdentityDatabaseUtil.class);
-        mockStatic(APIResourceManagementUtil.class);
-        mockStatic(IdentityTenantUtil.class);
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
 
-        APIResource apiResource = addAPIResourceToDB("testDeleteScope", getConnection(), TENANT_ID);
-        String apiId = apiResource.getId();
-        String scopeName = apiResource.getScopes().get(0).getName();
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
 
-        Connection connection = getConnection();
-        when(IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
-        when(IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
+            APIResource apiResource =
+                    addAPIResourceToDB("testDeleteScope", getConnection(), TENANT_ID, identityDatabaseUtil,
+                            organizationManagementUtil);
+            String apiId = apiResource.getId();
+            String scopeName = apiResource.getScopes().get(0).getName();
 
-        PowerMockito.doAnswer((Answer<Void>) invocation -> {
-            connection.commit();
-            return null;
-        }).when(IdentityDatabaseUtil.class, "commitTransaction", any(Connection.class));
+            Connection connection = getConnection();
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(true)).thenReturn(connection);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(false)).thenReturn(getConnection());
 
-        // Testing the deleteScope method with the created API resource's ID and scope ID
-        daoImpl.deleteScope(apiId, scopeName, TENANT_ID);
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.commitTransaction(any(Connection.class)))
+                    .thenAnswer((Answer<Void>) invocation -> {
+                        connection.commit();
+                        return null;
+                    });
 
-        // Checking whether the scope is deleted
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(getConnection());
-        when(IdentityTenantUtil.getTenantDomain(TENANT_ID)).thenReturn(getTenantDomain(TENANT_ID));
-        Assert.assertFalse(daoImpl.isScopeExistByName(scopeName, TENANT_ID));
+            // Testing the deleteScope method with the created API resource's ID and scope ID
+            daoImpl.deleteScope(apiId, scopeName, TENANT_ID);
+
+            // Checking whether the scope is deleted
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+            identityTenantUtil.when(() -> IdentityTenantUtil.getTenantDomain(TENANT_ID))
+                    .thenReturn(getTenantDomain(TENANT_ID));
+            Assert.assertFalse(daoImpl.isScopeExistByName(scopeName, TENANT_ID));
+        }
     }
 
     /**
@@ -474,17 +541,44 @@ public class CacheBackedAPIResourceManagementDAOTest extends PowerMockTestCase {
      *
      * @param namePostFix Postfix to be appended to each API resource and scope information.
      * @param connection  Database connection.
+     * @param tenantId    Tenant ID.
      * @return API resource.
      * @throws Exception Error when adding API resource.
      */
     private APIResource addAPIResourceToDB(String namePostFix, Connection connection, int tenantId) throws Exception {
 
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class);
+             MockedStatic<OrganizationManagementUtil> organizationManagementUtil =
+                     mockStatic(OrganizationManagementUtil.class)) {
+            return addAPIResourceToDB(namePostFix, connection, tenantId, identityDatabaseUtil,
+                    organizationManagementUtil);
+        }
+    }
+
+    /**
+     * Add API resource to the database.
+     *
+     * @param namePostFix Postfix to be appended to each API resource and scope information.
+     * @param connection  Database connection.
+     * @param tenantId    Tenant ID.
+     * @param identityDatabaseUtil Mocked IdentityDatabaseUtil.
+     * @return API resource.
+     * @throws Exception Error when adding API resource.
+     */
+    private APIResource addAPIResourceToDB(String namePostFix, Connection connection, int tenantId,
+                                           MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil,
+                                           MockedStatic<OrganizationManagementUtil> organizationManagementUtil)
+            throws Exception {
+
         APIResource apiResource = createAPIResource(namePostFix);
-        when(IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(connection);
-        PowerMockito.doAnswer((Answer<Void>) invocation -> {
-            connection.commit();
-            return null;
-        }).when(IdentityDatabaseUtil.class, "commitTransaction", any(Connection.class));
+        identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean())).thenReturn(connection);
+
+        identityDatabaseUtil.when(() -> IdentityDatabaseUtil.commitTransaction(any(Connection.class)))
+                .thenAnswer((Answer<Void>) invocation -> {
+                    connection.commit();
+                    return null;
+                });
+        organizationManagementUtil.when(() -> OrganizationManagementUtil.isOrganization(anyInt())).thenReturn(false);
         return daoImpl.addAPIResource(apiResource, tenantId);
     }
 

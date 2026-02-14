@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, WSO2 LLC. (http://www.wso2.org) All Rights Reserved.
+ * Copyright (c) 2013-2025, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -22,11 +22,13 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.slf4j.MDC;
 import org.wso2.carbon.base.MultitenantConstants;
+import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticationDataPublisher;
 import org.wso2.carbon.identity.application.authentication.framework.AuthenticationFlowHandler;
 import org.wso2.carbon.identity.application.authentication.framework.cache.AuthenticationRequestCacheEntry;
@@ -34,6 +36,10 @@ import org.wso2.carbon.identity.application.authentication.framework.config.mode
 import org.wso2.carbon.identity.application.authentication.framework.config.model.AuthenticatorConfig;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.SequenceConfig;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.StepConfig;
+import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.AuthGraphNode;
+import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.AuthenticationGraph;
+import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.ShowPromptNode;
+import org.wso2.carbon.identity.application.authentication.framework.config.model.graph.StepConfigGraphNode;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
 import org.wso2.carbon.identity.application.authentication.framework.context.SessionContext;
 import org.wso2.carbon.identity.application.authentication.framework.context.TransientObjectWrapper;
@@ -44,22 +50,28 @@ import org.wso2.carbon.identity.application.authentication.framework.exception.I
 import org.wso2.carbon.identity.application.authentication.framework.exception.JsFailureException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.MisconfigurationException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.PostAuthenticationFailedException;
+import org.wso2.carbon.identity.application.authentication.framework.exception.UserAssertionFailedException;
 import org.wso2.carbon.identity.application.authentication.framework.exception.UserIdNotFoundException;
 import org.wso2.carbon.identity.application.authentication.framework.handler.request.RequestCoordinator;
 import org.wso2.carbon.identity.application.authentication.framework.internal.FrameworkServiceComponent;
 import org.wso2.carbon.identity.application.authentication.framework.internal.FrameworkServiceDataHolder;
-import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedIdPData;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.authentication.framework.model.CommonAuthResponseWrapper;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkErrorConstants;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.authentication.framework.util.LoginContextManagementUtil;
 import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
-import org.wso2.carbon.identity.application.common.model.ServiceProviderProperty;
+import org.wso2.carbon.identity.base.IdentityException;
 import org.wso2.carbon.identity.central.log.mgt.utils.LogConstants;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
+import org.wso2.carbon.identity.core.context.IdentityContext;
+import org.wso2.carbon.identity.core.context.model.Flow;
+import org.wso2.carbon.identity.core.model.CookieBuilder;
+import org.wso2.carbon.identity.core.model.IdentityCookieConfig;
+import org.wso2.carbon.identity.core.model.IdentityErrorMsgContext;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.user.api.Tenant;
@@ -73,9 +85,13 @@ import org.wso2.carbon.utils.DiagnosticLog;
 import java.io.IOException;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -95,19 +111,24 @@ import static org.wso2.carbon.identity.application.authentication.framework.util
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ACCOUNT_UNLOCK_TIME_CLAIM;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.AnalyticsAttributes.SESSION_ID;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.BACK_TO_FIRST_STEP;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ERROR_DESCRIPTION_APP_DISABLED;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ERROR_STATUS_APP_DISABLED;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.IS_API_BASED;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ORGANIZATION_AUTHENTICATOR;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ORGANIZATION_LOGIN_HOME_REALM_IDENTIFIER;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.REDIRECT_URL;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.REQUEST_PARAM_SP;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.AUTH_TYPE;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.FORCE_AUTHENTICATE;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.IDENTIFIER_CONSENT;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.IDF;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.RESTART_FLOW;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.TENANT_DOMAIN;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RequestParams.TYPE;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ResidentIdpPropertyName.ACCOUNT_DISABLE_HANDLER_ENABLE_PROPERTY;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.USER_TENANT_DOMAIN;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.ROOT_DOMAIN;
 import static org.wso2.carbon.identity.application.authentication.framework.util.SessionNonceCookieUtil.NONCE_ERROR_CODE;
-import static org.wso2.carbon.identity.organization.management.service.constant.OrganizationManagementConstants.IS_APP_SHARED;
 
 /**
  * Request Coordinator
@@ -121,6 +142,9 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
     private static final String ACR_VALUES_ATTRIBUTE = "acr_values";
     private static final String REQUESTED_ATTRIBUTES = "requested_attributes";
     private static final String SERVICE_PROVIDER_QUERY_KEY = "serviceProvider";
+    private static final String PROMPT_ID_PARAM = "promptId";
+    private static final String PROMPT_RESP_PARAM = "promptResp";
+    private static final String SESSION_LIMIT_HANDLER_PARAM = "terminateActiveSessionsAction";
 
     public static DefaultRequestCoordinator getInstance() {
 
@@ -156,6 +180,7 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
             responseWrapper = new CommonAuthResponseWrapper(response);
             responseWrapper.setWrappedByFramework(true);
         }
+        boolean enteredFlow = false;
         AuthenticationContext context = null;
         String sessionDataKey = request.getParameter("sessionDataKey");
         try {
@@ -236,15 +261,27 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
                 context = FrameworkUtils.getContextData(request);
                 if (request.getAttribute(FrameworkConstants.RESTART_LOGIN_FLOW) != null &&
                         request.getAttribute(FrameworkConstants.RESTART_LOGIN_FLOW).equals("true")) {
+                    boolean contextHasUserAssertion = FrameworkUtils.contextHasUserAssertion(request, context);
                     context = (AuthenticationContext) context.getProperty(FrameworkConstants.INITIAL_CONTEXT);
+                    context.setProperty(FrameworkConstants.INITIAL_CONTEXT, context.clone());
                     context.initializeAnalyticsData();
                     String contextIdIncludedQueryParams = context.getContextIdIncludedQueryParams();
-                    contextIdIncludedQueryParams += FrameworkConstants.RESTART_LOGIN_FLOW_QUERY_PARAMS;
+                    if (!contextHasUserAssertion) {
+                        // If the context has user assertion, this error is not required to be shown to the user.
+                        contextIdIncludedQueryParams += FrameworkConstants.RESTART_LOGIN_FLOW_QUERY_PARAMS;
+                    }
                     context.setContextIdIncludedQueryParams(contextIdIncludedQueryParams);
                 } else {
                     returning = true;
                 }
                 associateTransientRequestData(request, responseWrapper, context);
+            }
+
+            // Check if the application is enabled.
+            if (context != null && !isApplicationEnabled(request, context)) {
+                FrameworkUtils.sendToRetryPage(request, responseWrapper, null, ERROR_STATUS_APP_DISABLED,
+                        ERROR_DESCRIPTION_APP_DISABLED);
+                return;
             }
 
             if (context != null) {
@@ -375,12 +412,36 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
                     }
                 }
 
+                if (isPromptRequest(request)) {
+                    AuthGraphNode currentNode =
+                            (AuthGraphNode) context.getProperty(FrameworkConstants.JSAttributes.PROP_CURRENT_NODE);
+                    // If the request is a prompt request returning from browser's back button, we need to handle it
+                    // by changing context to previous step.
+                    if (!(currentNode instanceof ShowPromptNode)) {
+                        currentNode = moveToPreviousShowPromptNode(currentNode);
+                        // If ShowPromptNode is not found, current node will be null.
+                        if (currentNode != null) {
+                            context.setCurrentStep(Math.max(0, context.getCurrentStep() - 1));
+                            context.setProperty(FrameworkConstants.JSAttributes.PROP_CURRENT_NODE, currentNode);
+                        }
+                    }
+                }
+
                 setSPAttributeToRequest(request, context);
                 context.setReturning(returning);
 
                 if (!context.isLogoutRequest()) {
+                    enteredFlow = enterFlow(Flow.Name.LOGIN);
                     FrameworkUtils.getAuthenticationRequestHandler().handle(request, responseWrapper, context);
+
+                    // Adding spId param to the redirect URL if it is not an external system call.
+                    boolean isExternalCall = Boolean.TRUE.equals(
+                            request.getAttribute(FrameworkConstants.IS_EXTERNAL_CALL));
+                    if (!isExternalCall) {
+                        addServiceProviderIdToRedirectUrl(responseWrapper, context);
+                    }
                 } else {
+                    enteredFlow = enterFlow(Flow.Name.LOGOUT);
                     FrameworkUtils.getLogoutRequestHandler().handle(request, responseWrapper, context);
                 }
             } else {
@@ -408,8 +469,9 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
             if (log.isDebugEnabled()) {
                 log.debug("Script initiated Exception occured.", e);
             }
-            publishAuthenticationFailure(request, context, context.getSequenceConfig().getAuthenticatedUser(),
-                    e.getErrorCode());
+
+            publishAuthenticationFailure(request, context, context.getSequenceConfig().getAuthenticatedUser(), e);
+
             if (log.isDebugEnabled()) {
                 log.debug("User will be redirected to retry page or the error page provided by script.");
             }
@@ -423,27 +485,52 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
             I18nErrorCodeWrapper errorWrapper = ErrorToI18nCodeTranslator.translate(e.getErrorCode());
             FrameworkUtils.removeCookie(request, responseWrapper,
                     FrameworkUtils.getPASTRCookieName(context.getContextIdentifier()));
-            publishAuthenticationFailure(request, context, context.getSequenceConfig().getAuthenticatedUser(),
-                    e.getErrorCode());
+            log.error(String.format("Error occurred while evaluating post authentication : %s : %s.",
+                    errorWrapper.getStatusMsg(), e.getMessage()));
+            publishAuthenticationFailure(request, context, context.getSequenceConfig().getAuthenticatedUser(), e);
             FrameworkUtils.sendToRetryPage(request, responseWrapper, context, errorWrapper.getStatus(),
                     errorWrapper.getStatusMsg());
         } catch (Exception e) {
-            if ((e instanceof FrameworkException)
-                    && (NONCE_ERROR_CODE.equals(((FrameworkException) e).getErrorCode()))) {
+            String errorMsg = null;
+            String status = null;
+            boolean isClientError = false;
+            if (e instanceof FrameworkException) {
                 if (log.isDebugEnabled()) {
                     log.debug(e.getMessage(), e);
                 }
-                request.setAttribute(FrameworkConstants.RESTART_LOGIN_FLOW, "true");
-                throw new CookieValidationFailedException(NONCE_ERROR_CODE, "Session nonce cookie value is not " +
-                        "matching " +
-                        "for session with sessionDataKey: " + request.getParameter("sessionDataKey"));
-            } else {
-                log.error("Exception in Authentication Framework", e);
-                FrameworkUtils.sendToRetryPage(request, responseWrapper, context);
+                if (NONCE_ERROR_CODE.equals(((FrameworkException) e).getErrorCode())) {
+                    request.setAttribute(FrameworkConstants.RESTART_LOGIN_FLOW, "true");
+                    throw new CookieValidationFailedException(NONCE_ERROR_CODE, "Session nonce cookie value is not " +
+                            "matching for session with sessionDataKey: " + request.getParameter("sessionDataKey"));
+                }
+                if (FrameworkErrorConstants.ErrorMessages.ERROR_MISMATCHING_TENANT_DOMAIN.getCode()
+                        .equals(((FrameworkException) e).getErrorCode())) {
+                    request.setAttribute(FrameworkConstants.RESTART_LOGIN_FLOW, "true");
+                    request.setAttribute(FrameworkConstants.REMOVE_COMMONAUTH_COOKIE, true);
+                    throw new CookieValidationFailedException(((FrameworkException) e).getErrorCode(), e.getMessage());
+                }
+                if (FrameworkErrorConstants.ErrorMessages.ERROR_INVALID_USER_ASSERTION.getCode()
+                        .equals(((FrameworkException) e).getErrorCode())) {
+                    request.setAttribute(FrameworkConstants.RESTART_LOGIN_FLOW, "true");
+                    throw new UserAssertionFailedException(((FrameworkException) e).getErrorCode(), e.getMessage());
+                }
+                if (FrameworkErrorConstants.ErrorMessages.ERROR_INVALID_AUTHENTICATOR.getCode()
+                        .equals(((FrameworkException) e).getErrorCode())) {
+                    errorMsg = e.getMessage();
+                    status = FrameworkConstants.ERROR_STATUS_INVALID_AUTHENTICATOR;
+                    isClientError = true;
+                }
             }
+            if (!isClientError) {
+                log.error("Exception in Authentication Framework", e);
+            }
+            FrameworkUtils.sendToRetryPage(request, responseWrapper, context, status, errorMsg);
         } finally {
             IdentityUtil.threadLocalProperties.get().remove(FrameworkConstants.AUTHENTICATION_FRAMEWORK_FLOW);
             UserCoreUtil.setDomainInThreadLocal(null);
+            if (Boolean.TRUE.equals(request.getAttribute(FrameworkConstants.REMOVE_COMMONAUTH_COOKIE))) {
+                removeRootDomainCommonAuthCookie(request, response);
+            }
             if (request.getAttribute(FrameworkConstants.RESTART_LOGIN_FLOW) == null ||
                     request.getAttribute(FrameworkConstants.RESTART_LOGIN_FLOW).equals("false")) {
                 unwrapResponse(responseWrapper, sessionDataKey, response, context);
@@ -470,7 +557,34 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
                     FrameworkUtils.removeALORCookie(request, response);
                 }
             }
+            if (enteredFlow) {
+                IdentityContext.getThreadLocalIdentityContext().exitFlow();
+            }
         }
+    }
+
+    private boolean isApplicationEnabled(HttpServletRequest request, AuthenticationContext context)
+            throws FrameworkException {
+
+        String type = request.getParameter(TYPE);
+        String relyingParty = request.getParameter(FrameworkConstants.RequestParams.ISSUER);
+        if (StringUtils.isBlank(type)) {
+            type = context.getRequestType();
+        }
+        if (StringUtils.isBlank(relyingParty)) {
+            relyingParty = context.getRelyingParty();
+        }
+        ServiceProvider serviceProvider = getServiceProvider(type, relyingParty, getTenantDomain(request));
+        if (serviceProvider == null) {
+            throw new FrameworkException("Unable to retrieve service provider for relying party : " + relyingParty);
+        }
+        if (!serviceProvider.isApplicationEnabled()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Application is disabled for the service provider with relying party: " + relyingParty);
+            }
+            return false;
+        }
+        return true;
     }
 
     protected void unwrapResponse(CommonAuthResponseWrapper responseWrapper, String sessionDataKey,
@@ -495,6 +609,29 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         } else if (responseWrapper.isWrappedByFramework()) {
             responseWrapper.write();
         }
+    }
+
+    private boolean isPromptRequest(HttpServletRequest request) {
+
+        // Checking for prompt request using promptId and promptResp parameters.
+        // Checking for session limit handler params since it shares same parameters with prompt request.
+        return StringUtils.isNotBlank(request.getParameter(PROMPT_ID_PARAM))
+                && Boolean.parseBoolean(request.getParameter(PROMPT_RESP_PARAM))
+                && StringUtils.isBlank(request.getParameter(SESSION_LIMIT_HANDLER_PARAM));
+    }
+
+    /**
+     * Move to the previous node in the authentication graph until show prompt node is reached.
+     *
+     * @param currentNode The current node in the authentication graph.
+     * @return The previous node in the authentication graph.
+     */
+    private AuthGraphNode moveToPreviousShowPromptNode(AuthGraphNode currentNode) {
+
+        while (currentNode != null && !(currentNode instanceof ShowPromptNode)) {
+            currentNode = currentNode.getParent();
+        }
+        return currentNode;
     }
 
     private boolean isIdentifierFirstRequest(HttpServletRequest request) {
@@ -656,9 +793,17 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
 
         if (IdentityTenantUtil.isTenantedSessionsEnabled()) {
             String loginTenantDomain = context.getLoginTenantDomain();
-            if (!callerPath.startsWith(FrameworkConstants.TENANT_CONTEXT_PREFIX + loginTenantDomain + "/") &&
-                    !callerPath.startsWith(FrameworkConstants.ORGANIZATION_CONTEXT_PREFIX + loginTenantDomain + "/")) {
-                callerPath = FrameworkConstants.TENANT_CONTEXT_PREFIX + loginTenantDomain + callerPath;
+            try {
+                if (!callerPath.startsWith(FrameworkConstants.TENANT_CONTEXT_PREFIX + loginTenantDomain + "/") &&
+                        FrameworkUtils.isURLRelative(callerPath)) {
+                    String organizationId = PrivilegedCarbonContext.getThreadLocalCarbonContext().getOrganizationId();
+                    if (organizationId == null || !callerPath.startsWith(FrameworkConstants.ORGANIZATION_CONTEXT_PREFIX
+                            + organizationId + "/")) {
+                        callerPath = FrameworkConstants.TENANT_CONTEXT_PREFIX + loginTenantDomain + callerPath;
+                    }
+                }
+            } catch (URISyntaxException e) {
+                throw new FrameworkException(e.getMessage(), e);
             }
         }
         context.setCallerPath(callerPath);
@@ -726,6 +871,7 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
                         FrameworkConstants.LogConstants.AUTHENTICATION_FRAMEWORK,
                         FrameworkConstants.LogConstants.ActionIDs.INIT_AUTH_FLOW)
                         .inputParam(LogConstants.InputKeys.APPLICATION_NAME, context.getServiceProviderName())
+                        .inputParam(LogConstants.InputKeys.CLIENT_ID, relyingParty)
                         .inputParam(LogConstants.InputKeys.CALLER_PATH, callerPath)
                         .inputParam(FrameworkConstants.LogConstants.TENANT_DOMAIN, tenantDomain)
                         .inputParam(FrameworkConstants.SESSION_DATA_KEY, callerSessionDataKey)
@@ -770,7 +916,7 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
 
         String callerPath = request.getParameter(FrameworkConstants.RequestParams.CALLER_PATH);
         try {
-            if (callerPath != null) {
+            if (callerPath != null && !shouldPreserveNestedRedirectParamsInCommonAuthLogout(request)) {
                 callerPath = URLDecoder.decode(callerPath, "UTF-8");
             }
         } catch (UnsupportedEncodingException e) {
@@ -779,7 +925,43 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         return callerPath;
     }
 
+    /**
+     * Determines whether nested redirect parameters in the logout return URL should be preserved
+     * during a CommonAuth logout request.
+     * This method checks if the config for enabling nested redirect parameters in the logout return URL
+     * is enabled, verifies if the request is targeting the CommonAuth endpoint, and ensures that the
+     * request is a logout request.
+     *
+     * @param request The HTTP servlet request to evaluate.
+     * @return true if nested redirect parameters should be preserved; false otherwise.
+     */
+    private boolean shouldPreserveNestedRedirectParamsInCommonAuthLogout(HttpServletRequest request) {
+
+        // Check if the config for nested redirect parameters in logout return URL is enabled
+        if (!FrameworkUtils.isNestedRedirectParamsInLogoutReturnUrlEnabled()) {
+            return false;
+        }
+
+        // Check if the request is targeting the CommonAuth endpoint
+        String uri = request.getRequestURI();
+        String endpointName = (uri != null) ? uri.substring(uri.lastIndexOf('/') + 1) : null;
+        boolean isCommonAuthEndpoint = StringUtils.equals(endpointName, FrameworkConstants.COMMONAUTH);
+        if (!isCommonAuthEndpoint) {
+            return false;
+        }
+
+        // Check if the request is a logout request
+        String logoutParam = request.getParameter(FrameworkConstants.RequestParams.LOGOUT);
+        return StringUtils.equalsIgnoreCase(Boolean.TRUE.toString(), logoutParam);
+    }
+
     private String getTenantDomain(HttpServletRequest request) throws FrameworkException {
+
+        String appResidentOrganization = PrivilegedCarbonContext.getThreadLocalCarbonContext()
+                .getApplicationResidentOrganizationId();
+        if (StringUtils.isNotBlank(appResidentOrganization)) {
+            return FrameworkUtils.resolveTenantDomainFromOrganizationId(appResidentOrganization);
+        }
 
         String tenantDomain = getTenantDomainFromContext();
         if (StringUtils.isNotBlank(tenantDomain)) {
@@ -846,7 +1028,17 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         }
         // Get service provider chain
         SequenceConfig effectiveSequence = getSequenceConfig(context, request.getParameterMap());
-        setStepConfigAuthenticatorList(effectiveSequence);
+        ApplicationConfig applicationConfig = effectiveSequence.getApplicationConfig();
+        String applicationName = applicationConfig.getApplicationName();
+        // organization SSO IDP is added for portal apps only if requested with FIDP param.
+        if (FrameworkConstants.Application.CONSOLE_APP.equals(applicationName) ||
+                FrameworkConstants.Application.MY_ACCOUNT_APP.equals(applicationName)) {
+            String[] fidpParam = request.getParameterMap().get(FrameworkConstants.RequestParams.FEDERATED_IDP);
+            if (fidpParam == null || fidpParam.length > 0 &&
+                    !ORGANIZATION_LOGIN_HOME_REALM_IDENTIFIER.equals(fidpParam[0])) {
+                removeOrganizationSsoStepsForPortalApps(effectiveSequence);
+            }
+        }
 
         if (acrRequested != null) {
             for (String acr : acrRequested) {
@@ -875,7 +1067,7 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
             }
         }
         // if a value for the sessionContextKey exists user has previously authenticated
-        if (sessionContextKey != null) {
+        if (sessionContextKey != null && !isForceAuthEnabled(request)) {
 
             SessionContext sessionContext = null;
             // get the authentication details from the cache
@@ -883,7 +1075,7 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
                 //Starting tenant-flow as tenant domain is retrieved downstream from the carbon-context to get the
                 // tenant wise session expiry time
                 FrameworkUtils.startTenantFlow(context.getTenantDomain());
-                sessionContext = FrameworkUtils.getSessionContextFromCache(request, context, sessionContextKey);
+                sessionContext = getSessionContext(request, context, applicationConfig, sessionContextKey);
             } finally {
                 FrameworkUtils.endTenantFlow();
             }
@@ -917,34 +1109,25 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
                     AuthenticatedUser authenticatedUser = previousAuthenticatedSeq.getAuthenticatedUser();
 
                     if (authenticatedUser != null) {
+                        String authenticatedUserTenantDomain = authenticatedUser.getTenantDomain();
+                        // Set the user for the current authentication/logout flow.
+                        context.setSubject(authenticatedUser);
 
-                        if (isUserAllowedToLogin(authenticatedUser)) {
-                            String authenticatedUserTenantDomain = authenticatedUser.getTenantDomain();
-                            // set the user for the current authentication/logout flow
-                            context.setSubject(authenticatedUser);
+                        if (log.isDebugEnabled()) {
+                            try {
+                                String userId = authenticatedUser.getUserId();
+                                log.debug("Already authenticated by userId: " + userId);
+                            } catch (UserIdNotFoundException e) {
+                                log.error("Error while getting the user ID from the authenticated user.");
+                            }
+                        }
 
+                        if (authenticatedUserTenantDomain != null) {
+                            // Set the user tenant domain for the current authentication/logout flow.
+                            context.setProperty(USER_TENANT_DOMAIN, authenticatedUserTenantDomain);
                             if (log.isDebugEnabled()) {
-                                log.debug("Already authenticated by username: " + authenticatedUser
-                                        .getAuthenticatedSubjectIdentifier());
+                                log.debug("Authenticated user tenant domain: " + authenticatedUserTenantDomain);
                             }
-
-                            if (authenticatedUserTenantDomain != null) {
-                                // set the user tenant domain for the current authentication/logout flow
-                                context.setProperty(USER_TENANT_DOMAIN, authenticatedUserTenantDomain);
-
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Authenticated user tenant domain: " + authenticatedUserTenantDomain);
-                                }
-                            }
-                        } else {
-                            if (log.isDebugEnabled()) {
-                                log.debug(String.format("User %s is not allowed to authenticate from previous session.",
-                                        authenticatedUser.toString()));
-                            }
-                            context.setPreviousSessionFound(false);
-                            FrameworkUtils.removeSessionContextFromCache(sessionContextKey,
-                                    context.getLoginTenantDomain());
-                            sessionContext.setAuthenticatedIdPs(new HashMap<String, AuthenticatedIdPData>());
                         }
                     }
                     // This is done to reflect the changes done in SP to the sequence config. So, the requested claim
@@ -965,6 +1148,11 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         }
 
         context.setServiceProviderName(effectiveSequence.getApplicationConfig().getApplicationName());
+        if (effectiveSequence.getApplicationConfig().getServiceProvider() != null && StringUtils.isNotBlank(
+                effectiveSequence.getApplicationConfig().getServiceProvider().getApplicationResourceId())) {
+            context.setServiceProviderResourceId(
+                    effectiveSequence.getApplicationConfig().getServiceProvider().getApplicationResourceId());
+        }
 
         // set the sequence for the current authentication/logout flow
         context.setSequenceConfig(effectiveSequence);
@@ -989,6 +1177,28 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         }
 
         return false;
+    }
+
+    private SessionContext getSessionContext(HttpServletRequest request, AuthenticationContext context,
+                                             ApplicationConfig appConfig, String sessionContextKey)
+            throws FrameworkException {
+
+        SessionContext sessionContext = FrameworkUtils.getSessionContextFromCache(request, context, sessionContextKey);
+        if (sessionContext != null && appConfig != null && !appConfig.isSaaSApp()
+            && sessionContext.getProperty(FrameworkUtils.TENANT_DOMAIN) != null) {
+            /* If the application is non-SaaS, the Service Provider tenant domain must match the user's tenant domain.
+             If there is a mismatch, set the removeCommonAuthCookie attribute in the request to ensure the commonAuthId
+             cookie is cleared by the AuthenticationFrameworkWrapper and remove the cookie from the response. */
+            boolean isMatchingTenantDomain = StringUtils.equals(
+                    sessionContext.getProperty(FrameworkUtils.TENANT_DOMAIN).toString(),
+                    context.getLoginTenantDomain());
+            if (!isMatchingTenantDomain) {
+                request.setAttribute(FrameworkConstants.REMOVE_COMMONAUTH_COOKIE, true);
+                return null;
+            }
+        }
+
+        return sessionContext;
     }
 
     private boolean isDifferent(List<String> newAcrList, List<String> previousAcrList) {
@@ -1060,7 +1270,19 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
     }
 
     private void publishAuthenticationFailure(HttpServletRequest request, AuthenticationContext context,
-                                              AuthenticatedUser user, String errorCode) {
+                                              AuthenticatedUser user, IdentityException identityException) {
+
+        String errorMessage = identityException.getMessage();
+        String errorCode = identityException.getErrorCode();
+
+        IdentityErrorMsgContext errorContext = IdentityUtil.getIdentityErrorMsg();
+        if (errorContext != null) {
+            Throwable rootCause = ExceptionUtils.getRootCause(identityException);
+            if (rootCause != null) {
+                errorMessage = rootCause.getMessage();
+                // Not modifying the error code as it is already used in the analytics feature.
+            }
+        }
 
         Serializable authenticationStartTime =
                 context.getAnalyticsData(FrameworkConstants.AnalyticsData.AUTHENTICATION_START_TIME);
@@ -1069,6 +1291,11 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
                     System.currentTimeMillis() - (long) authenticationStartTime);
         }
         context.setAnalyticsData(FrameworkConstants.AnalyticsData.AUTHENTICATION_ERROR_CODE, errorCode);
+        /*
+         * AUTHENTICATION_ERROR_MESSAGE -This error message is utilized only by the webhook feature,
+         * not by the analytics.
+         */
+        context.setAnalyticsData(FrameworkConstants.AnalyticsData.AUTHENTICATION_ERROR_MESSAGE, errorMessage);
         AuthenticationDataPublisher authnDataPublisherProxy = FrameworkServiceDataHolder.getInstance()
                 .getAuthnDataPublisherProxy();
 
@@ -1204,33 +1431,51 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         }
     }
 
-    private void setStepConfigAuthenticatorList(SequenceConfig effectiveSequence) {
+    /**
+     * The organization SSO IDP is added for Console & MyAccount to provide sub-organization access. But the
+     * organization SSO IDP should be hidden from the login sequence unless the organization SSO option is requested via
+     * the fidp parameter.
+     *
+     * @param effectiveSequence The effective sequences.
+     */
+    private void removeOrganizationSsoStepsForPortalApps(SequenceConfig effectiveSequence) {
 
         Map<Integer, StepConfig> stepMap = effectiveSequence.getStepMap();
-        ApplicationConfig applicationConfig = effectiveSequence.getApplicationConfig();
-        if (MapUtils.isEmpty(stepMap) && applicationConfig == null) {
-            return;
-        }
-        ServiceProviderProperty[] spProperties = applicationConfig.getServiceProvider().getSpProperties();
-        boolean showOrganizationAuthenticator = true;
-        for (ServiceProviderProperty property : spProperties) {
-            if (IS_APP_SHARED.equals(property.getName()) && !Boolean.parseBoolean(property.getValue())) {
-                showOrganizationAuthenticator = false;
-                break;
-            }
-        }
-        if (showOrganizationAuthenticator) {
-            return;
+        if (MapUtils.isEmpty(stepMap)) {
+            stepMap = effectiveSequence.getAuthenticationGraph().getStepMap();
         }
         StepConfig stepConfig = stepMap.get(1);
         if (stepConfig == null) {
             return;
         }
+        // Remove the organization SSO authenticator from the step configs.
         List<AuthenticatorConfig> authenticatorList = stepConfig.getAuthenticatorList();
         authenticatorList = authenticatorList.stream()
                 .filter(authenticatorConfig -> !authenticatorConfig.getName()
                         .equals(ORGANIZATION_AUTHENTICATOR)).collect(Collectors.toList());
         stepConfig.setAuthenticatorList(authenticatorList);
+
+        // Remove the organization SSO authenticator from the graph nodes if already configured.
+        AuthenticationGraph authenticationGraph = effectiveSequence.getAuthenticationGraph();
+        if (authenticationGraph == null) {
+            return;
+        }
+        AuthGraphNode authGraphNode = authenticationGraph.getStartNode();
+        if (authGraphNode == null) {
+            return;
+        }
+        if (authGraphNode instanceof StepConfigGraphNode) {
+            StepConfigGraphNode graphNode = (StepConfigGraphNode) authGraphNode;
+            if (graphNode.getStepConfig() == null ||
+                    CollectionUtils.isEmpty(graphNode.getStepConfig().getAuthenticatorList())) {
+                return;
+            }
+            authenticatorList = graphNode.getStepConfig().getAuthenticatorList();
+            authenticatorList = authenticatorList.stream()
+                    .filter(authenticatorConfig -> !authenticatorConfig.getName()
+                            .equals(ORGANIZATION_AUTHENTICATOR)).collect(Collectors.toList());
+            graphNode.getStepConfig().setAuthenticatorList(authenticatorList);
+        }
     }
 
     private boolean isStepHasMultiOption(AuthenticationContext context) {
@@ -1247,5 +1492,89 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
             }
         }
         return false;
+    }
+
+    private void addServiceProviderIdToRedirectUrl(CommonAuthResponseWrapper responseWrapper,
+                                                   AuthenticationContext context) {
+
+        if (responseWrapper == null || context == null) {
+            return;
+        }
+        try {
+            String redirectURL = responseWrapper.getRedirectURL();
+            String serviceProviderID = context.getServiceProviderResourceId();
+            if (StringUtils.isNotBlank(redirectURL) && StringUtils.isNotBlank(serviceProviderID)) {
+                URI uri = new URI(redirectURL);
+                String query = uri.getRawQuery();
+                if (StringUtils.isNotBlank(query)) {
+                    if (!query.contains(FrameworkConstants.REQUEST_PARAM_SP_UUID + "=")) {
+                        redirectURL = redirectURL + "&" + FrameworkConstants.REQUEST_PARAM_SP_UUID
+                                + "=" + URLEncoder.encode(serviceProviderID,
+                                StandardCharsets.UTF_8.name());
+                    }
+                } else {
+                    redirectURL = redirectURL + "?" + FrameworkConstants.REQUEST_PARAM_SP_UUID
+                            + "=" + URLEncoder.encode(serviceProviderID, StandardCharsets.UTF_8.name());
+                }
+                responseWrapper.sendRedirect(redirectURL);
+            }
+        } catch (URISyntaxException | IOException e) {
+            // No need to break the flow due to this error since added spId to redirect URL is used only
+            // for branding purposes.
+            log.debug("Error while adding spId to redirect URL.");
+        }
+    }
+
+    private boolean isForceAuthEnabled(HttpServletRequest request) {
+
+        return Boolean.parseBoolean(request.getParameter(FORCE_AUTHENTICATE));
+    }
+
+    private static void removeRootDomainCommonAuthCookie(HttpServletRequest request, HttpServletResponse response) {
+
+        if (request == null || request.getCookies() == null || response == null) {
+            return;
+        }
+
+        String cookieValue = Arrays.stream(request.getCookies())
+                .filter(cookie -> FrameworkConstants.COMMONAUTH_COOKIE.equals(cookie.getName()))
+                .findFirst()
+                .map(Cookie::getValue)
+                .orElse(StringUtils.EMPTY);
+        CookieBuilder cookieBuilder = new CookieBuilder(FrameworkConstants.COMMONAUTH_COOKIE, cookieValue);
+        IdentityCookieConfig cookieConfig = IdentityUtil.getIdentityCookieConfig(FrameworkConstants.COMMONAUTH_COOKIE);
+
+        if (cookieConfig != null) {
+            FrameworkUtils.updateCookieConfig(cookieBuilder, cookieConfig, 0, ROOT_DOMAIN);
+        } else {
+            cookieBuilder.setHttpOnly(true);
+            cookieBuilder.setSecure(true);
+            cookieBuilder.setPath(ROOT_DOMAIN);
+        }
+
+        cookieBuilder.setMaxAge(0);
+        response.addCookie(cookieBuilder.build());
+    }
+
+    private boolean enterFlow(Flow.Name flowName) {
+
+        Flow authenticationFlow = new Flow.Builder()
+                .name(flowName)
+                .initiatingPersona(getFlowInitiatingPersona())
+                .build();
+        IdentityContext.getThreadLocalIdentityContext().enterFlow(authenticationFlow);
+        return true;
+    }
+
+    private Flow.InitiatingPersona getFlowInitiatingPersona() {
+
+        Flow existingFlow = IdentityContext.getThreadLocalIdentityContext().getCurrentFlow();
+        if (existingFlow != null) {
+            return existingFlow.getInitiatingPersona();
+        } else if (IdentityContext.getThreadLocalIdentityContext().isApplicationActor()) {
+            return Flow.InitiatingPersona.APPLICATION;
+        } else {
+            return Flow.InitiatingPersona.USER;
+        }
     }
 }

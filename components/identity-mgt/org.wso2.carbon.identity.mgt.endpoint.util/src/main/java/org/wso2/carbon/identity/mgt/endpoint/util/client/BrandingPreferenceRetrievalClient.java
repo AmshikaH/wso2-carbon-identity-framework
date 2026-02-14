@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2023, WSO2 LLC. (http://www.wso2.com).
+ * Copyright (c) 2021-2025, WSO2 LLC. (http://www.wso2.com).
  *
  * WSO2 LLC. licenses this file to you under the Apache License,
  * Version 2.0 (the "License"); you may not use this file except
@@ -23,13 +23,9 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.core5.net.URIBuilder;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
@@ -38,7 +34,6 @@ import org.wso2.carbon.identity.mgt.endpoint.util.IdentityManagementEndpointUtil
 import org.wso2.carbon.identity.mgt.endpoint.util.IdentityManagementServiceUtil;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 
@@ -55,6 +50,8 @@ public class BrandingPreferenceRetrievalClient {
     private static final String RESOURCE_NAME_URL_SEARCH_PARAM = "name";
     private static final String RESOURCE_LOCALE_URL_SEARCH_PARAM = "locale";
     private static final String RESOURCE_SCREEN_URL_SEARCH_PARAM = "screen";
+    private static final String RESTRICT_TO_PUBLISHED_URL_SEARCH_PARAM = "restrictToPublished";
+    private static final String TRUE = "true";
 
     /**
      * Check for branding preference in the given tenant.
@@ -69,7 +66,7 @@ public class BrandingPreferenceRetrievalClient {
     public JSONObject getPreference(String tenant, String type, String name, String locale)
             throws BrandingPreferenceRetrievalClientException {
 
-        try (CloseableHttpClient httpclient = HttpClientBuilder.create().useSystemProperties().build()) {
+        try {
 
             String uri = getBrandingPreferenceEndpoint(tenant);
 
@@ -87,6 +84,8 @@ public class BrandingPreferenceRetrievalClient {
                 if (StringUtils.isNotBlank(locale)) {
                     uriBuilder.addParameter(RESOURCE_LOCALE_URL_SEARCH_PARAM, locale);
                 }
+
+                uriBuilder.addParameter(RESTRICT_TO_PUBLISHED_URL_SEARCH_PARAM, TRUE);
                 uri = uriBuilder.build().toString();
 
                 if (log.isDebugEnabled()) {
@@ -103,19 +102,9 @@ public class BrandingPreferenceRetrievalClient {
             HttpGet request = new HttpGet(uri);
             setAuthorizationHeader(request);
 
-            JSONObject jsonResponse = new JSONObject();
+            String responseString = IdentityManagementEndpointUtil.getHttpClientResponseString(request);
 
-            try (CloseableHttpResponse response = httpclient.execute(request)) {
-
-                if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
-                    jsonResponse = new JSONObject(
-                            new JSONTokener(new InputStreamReader(response.getEntity().getContent())));
-                }
-
-                return jsonResponse;
-            } finally {
-                request.releaseConnection();
-            }
+            return parseJsonResponse(responseString);
         } catch (IOException e) {
             String msg = "Error while getting branding preference for tenant : " + tenant;
 
@@ -141,7 +130,7 @@ public class BrandingPreferenceRetrievalClient {
     public JSONObject getCustomTextPreference(String tenant, String type, String name, String screen, String locale)
             throws BrandingPreferenceRetrievalClientException {
 
-        try (CloseableHttpClient httpclient = HttpClientBuilder.create().useSystemProperties().build()) {
+        try {
 
             String uri = getCustomTextPreferenceEndpoint(tenant);
 
@@ -178,19 +167,9 @@ public class BrandingPreferenceRetrievalClient {
             HttpGet request = new HttpGet(uri);
             setAuthorizationHeader(request);
 
-            JSONObject jsonResponse = new JSONObject();
+            String responseString = IdentityManagementEndpointUtil.getHttpClientResponseString(request);
 
-            try (CloseableHttpResponse response = httpclient.execute(request)) {
-
-                if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
-                    jsonResponse = new JSONObject(
-                            new JSONTokener(new InputStreamReader(response.getEntity().getContent())));
-                }
-
-                return jsonResponse;
-            } finally {
-                request.releaseConnection();
-            }
+            return parseJsonResponse(responseString);
         } catch (IOException e) {
             String msg = "Error while getting custom text preference for tenant : " + tenant;
 
@@ -199,6 +178,21 @@ public class BrandingPreferenceRetrievalClient {
             }
             throw new BrandingPreferenceRetrievalClientException(msg, e);
         }
+    }
+
+    /**
+     * Parse a string response to a JSONObject.
+     *
+     * @param responseString The string to parse
+     * @return A JSONObject containing the parsed data or an empty JSONObject if the string is empty
+     */
+    private JSONObject parseJsonResponse(String responseString) {
+
+        JSONObject jsonResponse = new JSONObject();
+        if (!StringUtils.isEmpty(responseString)) {
+            jsonResponse = new JSONObject(new JSONTokener(responseString));
+        }
+        return jsonResponse;
     }
 
     /**
@@ -239,16 +233,7 @@ public class BrandingPreferenceRetrievalClient {
             throws BrandingPreferenceRetrievalClientException {
 
         try {
-            String brandingPreferenceURL = IdentityManagementEndpointUtil.getBasePath(tenantDomain, context);
-            /* Branding preference retrieval API has exposed as an organization qualified API when accessing the
-               branding preferences of organizations. */
-            if (StringUtils.isNotEmpty(PrivilegedCarbonContext.getThreadLocalCarbonContext().getOrganizationId()) &&
-                    brandingPreferenceURL != null &&
-                    brandingPreferenceURL.contains(FrameworkConstants.TENANT_CONTEXT_PREFIX)) {
-                brandingPreferenceURL = brandingPreferenceURL.replace(FrameworkConstants.TENANT_CONTEXT_PREFIX,
-                        FrameworkConstants.ORGANIZATION_CONTEXT_PREFIX);
-            }
-            return brandingPreferenceURL;
+            return IdentityManagementEndpointUtil.getBasePath(tenantDomain, context);
         } catch (ApiException e) {
             throw new BrandingPreferenceRetrievalClientException("Error while building url for context: " + context);
         }
@@ -259,7 +244,7 @@ public class BrandingPreferenceRetrievalClient {
      *
      * @param httpMethod HTTP request method.
      */
-    private void setAuthorizationHeader(HttpRequestBase httpMethod) {
+    private void setAuthorizationHeader(HttpUriRequestBase httpMethod) {
 
         String toEncode = IdentityManagementServiceUtil.getInstance().getAppName() + ":"
                 + String.valueOf(IdentityManagementServiceUtil.getInstance().getAppPassword());

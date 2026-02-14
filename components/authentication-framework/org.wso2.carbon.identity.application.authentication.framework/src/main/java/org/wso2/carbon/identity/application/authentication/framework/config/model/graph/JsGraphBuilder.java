@@ -21,6 +21,7 @@ package org.wso2.carbon.identity.application.authentication.framework.config.mod
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.graalvm.polyglot.HostAccess;
 import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.AsyncProcess;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.AuthenticatorConfig;
@@ -31,11 +32,16 @@ import org.wso2.carbon.identity.application.authentication.framework.internal.Fr
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.common.ApplicationAuthenticatorService;
+import org.wso2.carbon.identity.application.common.exception.AuthenticatorMgtException;
 import org.wso2.carbon.identity.application.common.model.FederatedAuthenticatorConfig;
 import org.wso2.carbon.identity.application.common.model.LocalAuthenticatorConfig;
+import org.wso2.carbon.identity.base.IdentityRuntimeException;
 import org.wso2.carbon.identity.functions.library.mgt.FunctionLibraryManagementService;
 import org.wso2.carbon.identity.functions.library.mgt.exception.FunctionLibraryManagementException;
 import org.wso2.carbon.identity.functions.library.mgt.model.FunctionLibrary;
+import org.wso2.carbon.identity.secret.mgt.core.SecretResolveManager;
+import org.wso2.carbon.identity.secret.mgt.core.exception.SecretManagementException;
+import org.wso2.carbon.identity.secret.mgt.core.model.ResolvedSecret;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -54,14 +60,14 @@ import javax.script.ScriptException;
 public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
 
     private static final Log log = LogFactory.getLog(JsGraphBuilder.class);
-    private Map<Integer, StepConfig> stepNamedMap;
-    private AuthenticationGraph result = new AuthenticationGraph();
-    private AuthGraphNode currentNode = null;
-    private AuthenticationContext authenticationContext;
+    protected Map<Integer, StepConfig> stepNamedMap;
+    protected AuthenticationGraph result = new AuthenticationGraph();
+    protected AuthGraphNode currentNode = null;
+    protected AuthenticationContext authenticationContext;
     private ScriptEngine engine;
-    private static ThreadLocal<AuthenticationContext> contextForJs = new ThreadLocal<>();
-    private static ThreadLocal<AuthGraphNode> dynamicallyBuiltBaseNode = new ThreadLocal<>();
-    private static ThreadLocal<JsGraphBuilder> currentBuilder = new ThreadLocal<>();
+    protected static ThreadLocal<AuthenticationContext> contextForJs = new ThreadLocal<>();
+    protected static ThreadLocal<AuthGraphNode> dynamicallyBuiltBaseNode = new ThreadLocal<>();
+    protected static ThreadLocal<JsGraphBuilder> currentBuilder = new ThreadLocal<>();
     private static final String REMOVE_FUNCTIONS = "var quit=function(){Log.error('quit function is restricted.')};" +
             "var exit=function(){Log.error('exit function is restricted.')};" +
             "var print=function(){Log.error('print function is restricted.')};" +
@@ -69,10 +75,12 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
             "var readFully=function(){Log.error('readFully function is restricted.')};" +
             "var readLine=function(){Log.error('readLine function is restricted.')};" +
             "var load=function(){Log.error('load function is restricted.')};" +
+            "var printErr=function(){Log.error('printErr function is restricted.')};" +
             "var loadWithNewGlobal=function(){Log.error('loadWithNewGlobal function is restricted.')};" +
             "var $ARG=null;var $ENV=null;var $EXEC=null;" +
             "var $OPTIONS=null;var $OUT=null;var $ERR=null;var $EXIT=null;" +
             "Object.defineProperty(this, 'engine', {});";
+
     /**
      * Returns the built graph.
      *
@@ -247,7 +255,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
      * @param stepOptions   Options provided from the script for the step.
      * @param stepConfigMap StepConfigs of each step as a map.
      */
-    private void handleStepOptions(StepConfig stepConfig, Map<String, String> stepOptions,
+    protected void handleStepOptions(StepConfig stepConfig, Map<String, String> stepOptions,
                                    Map<Integer, StepConfig> stepConfigMap) {
 
         stepConfig.setForced(Boolean.parseBoolean(stepOptions.get(FrameworkConstants.JSAttributes.FORCE_AUTH_PARAM)));
@@ -315,9 +323,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
                     removeOption = true;
 
                     if (FrameworkConstants.LOCAL_IDP_NAME.equals(idpName)) {
-                        List<LocalAuthenticatorConfig> localAuthenticators = ApplicationAuthenticatorService
-                            .getInstance().getLocalAuthenticators();
-                        for (LocalAuthenticatorConfig localAuthenticatorConfig : localAuthenticators) {
+                        for (LocalAuthenticatorConfig localAuthenticatorConfig : getLocalAuthenticatorConfigsList()) {
                             if (FrameworkUtils.isAuthenticatorNameInAuthConfigEnabled()) {
                                 if (authenticatorConfig.getName().equals(localAuthenticatorConfig.getName()) &&
                                         authenticators.contains(localAuthenticatorConfig.getName())) {
@@ -412,6 +418,20 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
     }
 
     /**
+     * Get all both SYSTEM and USER defined local authenticator configurations.
+     */
+    protected List<LocalAuthenticatorConfig> getLocalAuthenticatorConfigsList() {
+
+        String tenantDomain = CarbonContext.getThreadLocalCarbonContext().getTenantDomain();
+        try {
+            return ApplicationAuthenticatorService.getInstance().getAllLocalAuthenticators(tenantDomain);
+        } catch (AuthenticatorMgtException e) {
+            throw new IdentityRuntimeException(String.format("Error while retrieving all local authenticator" +
+                    " configurations for tenant: %s", tenantDomain), e);
+        }
+    }
+
+    /**
      * Add authenticator params in the message context.
      *
      * @param options Authentication options
@@ -470,7 +490,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
     public static void addPrompt(String templateId, Map<String, Object> parameters, Map<String, Object> handlers,
                                  Map<String, Object> callbacks) {
 
-        FrameworkServiceDataHolder.getInstance().getJsGraphBuilderFactory().getCurrentBuilder()
+        FrameworkServiceDataHolder.getInstance().getJsGenericGraphBuilderFactory().getCurrentBuilder()
                 .addPromptInternal(templateId, parameters, handlers, callbacks);
     }
 
@@ -500,6 +520,66 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
     }
 
     /**
+     * Get the secret by name.
+     *
+     * @param secretName secretName.
+     * @return secretValue.
+     * @throws SecretManagementException Secret management exception.
+     */
+    public String getSecretByName(String secretName) throws SecretManagementException {
+
+        SecretResolveManager secretResolveManager = FrameworkServiceComponent.getSecretConfigManager();
+        String secretValue = null;
+
+        ResolvedSecret responseDTO = secretResolveManager.getResolvedSecret(FrameworkConstants.SECRET_TYPE, secretName);
+
+        secretValue = responseDTO.getResolvedSecretValue();
+        return secretValue;
+    }
+
+    /**
+     * Load Executor implementation to load local libraries.
+     */
+    public class JsGraalLoadExecutorImpl implements LoadExecutor {
+
+        @HostAccess.Export
+        public String loadLocalLibrary(String libraryName) throws FunctionLibraryManagementException {
+
+            return JsGraphBuilder.this.loadLocalLibrary(libraryName);
+        }
+    }
+
+    /**
+     * Load Executor implementation to load local libraries.
+     */
+    public class JsGraalGetSecretImpl implements GetSecret {
+
+        @HostAccess.Export
+        public String getSecretByName(String secretName) throws SecretManagementException {
+
+            return JsGraphBuilder.this.getSecretByName(secretName);
+        }
+    }
+
+    /**
+     * Functional interface to get secret by name.
+     */
+    @FunctionalInterface
+    public interface GetSecret {
+
+        String getSecretByName(String secretName) throws SecretManagementException;
+    }
+
+    /**
+     * Functional interface to load authentication library.
+     */
+    @FunctionalInterface
+    public interface LoadExecutor {
+
+        String loadLocalLibrary(String libraryName) throws FunctionLibraryManagementException;
+    }
+
+    /**
      * Adds a function to show a prompt in Javascript code.
      *
      * @param parameterMap parameterMap
@@ -507,7 +587,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
     public static void addLongWaitProcess(AsyncProcess asyncProcess,
                                           Map<String, Object> parameterMap) {
 
-        FrameworkServiceDataHolder.getInstance().getJsGraphBuilderFactory().getCurrentBuilder()
+        FrameworkServiceDataHolder.getInstance().getJsGenericGraphBuilderFactory().getCurrentBuilder()
                 .addLongWaitProcessInternal(asyncProcess, parameterMap);
     }
 
@@ -519,7 +599,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
      * @param destination Current node.
      * @param newNode     New node to attach.
      */
-    private static void infuse(AuthGraphNode destination, AuthGraphNode newNode) {
+    protected static void infuse(AuthGraphNode destination, AuthGraphNode newNode) {
 
         if (destination instanceof StepConfigGraphNode) {
             StepConfigGraphNode stepConfigGraphNode = ((StepConfigGraphNode) destination);
@@ -545,7 +625,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
      * @param baseNode     Base node.
      * @param nodeToAttach Node to attach.
      */
-    private static void attachToLeaf(AuthGraphNode baseNode, AuthGraphNode nodeToAttach) {
+    protected static void attachToLeaf(AuthGraphNode baseNode, AuthGraphNode nodeToAttach) {
 
         if (baseNode instanceof StepConfigGraphNode) {
             StepConfigGraphNode stepConfigGraphNode = ((StepConfigGraphNode) baseNode);
@@ -594,7 +674,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
      * @param stepConfig Step Config Object.
      * @return built and wrapped new StepConfigGraphNode.
      */
-    private static StepConfigGraphNode wrap(StepConfig stepConfig) {
+    protected static StepConfigGraphNode wrap(StepConfig stepConfig) {
 
         return new StepConfigGraphNode(stepConfig);
     }
@@ -623,6 +703,7 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
     @FunctionalInterface
     public interface PromptExecutor {
 
+        @HostAccess.Export
         void prompt(String template, Object... parameterMap);
     }
 
@@ -637,12 +718,12 @@ public abstract class JsGraphBuilder implements JsBaseGraphBuilder {
     }
 
     /**
-     * Functional interface to load authentication library.
+     * Functional interface for sending error in the authentication script.
      */
     @FunctionalInterface
-    public interface LoadExecutor {
+    public interface SendErrorFunction {
 
-        String loadLocalLibrary(String libraryName) throws FunctionLibraryManagementException;
+        void sendError(String url, Map<String, Object> parameterMap);
     }
 
     @Deprecated

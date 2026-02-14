@@ -27,13 +27,12 @@ import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
+import org.wso2.carbon.context.CarbonCoreInitializedEvent;
 import org.wso2.carbon.identity.core.util.IdentityDatabaseUtil;
-import org.wso2.carbon.identity.secret.mgt.core.IdPSecretsProcessor;
 import org.wso2.carbon.identity.secret.mgt.core.SecretManager;
 import org.wso2.carbon.identity.secret.mgt.core.SecretManagerImpl;
 import org.wso2.carbon.identity.secret.mgt.core.SecretResolveManager;
 import org.wso2.carbon.identity.secret.mgt.core.SecretResolveManagerImpl;
-import org.wso2.carbon.identity.secret.mgt.core.SecretsProcessor;
 import org.wso2.carbon.identity.secret.mgt.core.dao.SecretDAO;
 import org.wso2.carbon.identity.secret.mgt.core.dao.impl.CachedBackedSecretDAO;
 import org.wso2.carbon.identity.secret.mgt.core.dao.impl.SecretDAOImpl;
@@ -71,8 +70,6 @@ public class SecretManagerComponent {
                 new SecretManagerImpl(), null);
         bundleContext.registerService(SecretResolveManager.class.getName(),
                 new SecretResolveManagerImpl(), null);
-        bundleContext.registerService(SecretsProcessor.class.getName(),
-                new IdPSecretsProcessor(), null);
         SecretManagerComponentDataHolder.getInstance().setSecretManagementEnabled
                 (isSecretManagementEnabled());
     }
@@ -102,6 +99,22 @@ public class SecretManagerComponent {
             log.debug("Purpose DAO is unregistered in SecretManager service.");
         }
         SecretManagerComponentDataHolder.getInstance().getSecretDAOS().remove(secretDAO);
+    }
+
+    @Reference(
+            name = "carbon.core.initialized.event",
+            service = CarbonCoreInitializedEvent.class,
+            cardinality = ReferenceCardinality.MANDATORY,
+            policy = ReferencePolicy.DYNAMIC,
+            unbind = "unsetCarbonCoreInitializedEvent"
+    )
+    protected void setCarbonCoreInitializedEvent(CarbonCoreInitializedEvent ignored) {
+        
+        // Waiting for Carbon core to be initialized.
+    }
+
+    protected void unsetCarbonCoreInitializedEvent(CarbonCoreInitializedEvent ignored) {
+
     }
 
     private boolean isSecretManagementEnabled() {

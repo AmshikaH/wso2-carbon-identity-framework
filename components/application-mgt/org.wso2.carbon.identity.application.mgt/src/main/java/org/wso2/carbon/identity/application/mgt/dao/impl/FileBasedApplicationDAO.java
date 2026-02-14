@@ -25,6 +25,7 @@ import org.wso2.carbon.identity.application.common.model.ClaimMapping;
 import org.wso2.carbon.identity.application.common.model.InboundAuthenticationRequestConfig;
 import org.wso2.carbon.identity.application.common.model.LocalAndOutboundAuthenticationConfig;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
+import org.wso2.carbon.identity.application.mgt.ApplicationConstants;
 import org.wso2.carbon.identity.application.mgt.internal.ApplicationManagementServiceComponent;
 
 import java.util.ArrayList;
@@ -92,8 +93,12 @@ public class FileBasedApplicationDAO extends AbstractApplicationDAOImpl {
             ApplicationBasicInfo basicInfo = new ApplicationBasicInfo();
             basicInfo.setApplicationName(entry.getValue().getApplicationName());
             basicInfo.setDescription(entry.getValue().getDescription());
+            if (entry.getValue().getApplicationVersion() == null) {
+                basicInfo.setApplicationVersion(ApplicationConstants.ApplicationVersion.BASE_APP_VERSION);
+            } else {
+                basicInfo.setApplicationVersion(entry.getValue().getApplicationVersion());
+            }
             appInfo.add(basicInfo);
-
         }
 
         return appInfo.toArray(new ApplicationBasicInfo[appInfo.size()]);
@@ -122,6 +127,11 @@ public class FileBasedApplicationDAO extends AbstractApplicationDAOImpl {
             ApplicationBasicInfo basicInfo = new ApplicationBasicInfo();
             basicInfo.setApplicationName(entry.getValue().getApplicationName());
             basicInfo.setDescription(entry.getValue().getDescription());
+            if (entry.getValue().getApplicationVersion() == null) {
+                basicInfo.setApplicationVersion(ApplicationConstants.ApplicationVersion.BASE_APP_VERSION);
+            } else {
+                basicInfo.setApplicationVersion(entry.getValue().getApplicationVersion());
+            }
             appInfo.add(basicInfo);
         }
 
@@ -304,5 +314,12 @@ public class FileBasedApplicationDAO extends AbstractApplicationDAOImpl {
 
         // For the File based applications, application name is set as resource id.
         return getApplication(resourceId, tenantDomain);
+    }
+
+    @Override
+    public void updateApplicationLocalAndOutboundAuthConfig(ServiceProvider applicationDTO, String tenantDomain)
+            throws IdentityApplicationManagementException {
+
+        throw new IdentityApplicationManagementException("Not supported in file based dao.");
     }
 }

@@ -22,6 +22,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.exception.UserSessionException;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.core.AbstractIdentityUserOperationEventListener;
@@ -299,7 +300,9 @@ public class IdentityUserNameResolverListener extends AbstractIdentityUserOperat
         try {
             // Getting the userName from thread-local which has been set from doPreDeleteUserWithID.
             String userName = (String) IdentityUtil.threadLocalProperties.get().get(DO_PRE_DELETE_USER_USER_NAME);
-
+            if (userName == null) {
+                return true;
+            }
             for (UserOperationEventListener listener : getUserStoreManagerListeners()) {
                 if (isNotAResolverListener(listener)) {
                     if (!listener.doPostDeleteUser(userName, userStoreManager)) {
@@ -888,6 +891,7 @@ public class IdentityUserNameResolverListener extends AbstractIdentityUserOperat
             tempUserNamesList.clear();
         }
 
+        String tenantDomain = CarbonContext.getThreadLocalCarbonContext().getTenantDomain();
         // Reflect newly add users by listeners in returnUsersList
         if (CollectionUtils.isNotEmpty(returnUserNamesList)) {
             tempUserNamesList.addAll(returnUserNamesList);
@@ -895,8 +899,11 @@ public class IdentityUserNameResolverListener extends AbstractIdentityUserOperat
             for (String username : tempUserNamesList) {
                 User newUser = new User();
                 newUser.setUsername(username);
+                newUser.setPreferredUsername(username);
+                newUser.setTenantDomain(tenantDomain);
                 try {
                     newUser.setUserID(FrameworkUtils.resolveUserIdFromUsername(userStoreManager, username));
+                    newUser.setUserStoreDomain(IdentityUtil.extractDomainFromName(username));
                 } catch (UserSessionException e) {
                     if (log.isDebugEnabled()) {
                         log.debug("Error occurred while resolving Id for the user: " + username, e);
@@ -1171,13 +1178,19 @@ public class IdentityUserNameResolverListener extends AbstractIdentityUserOperat
             return true;
         }
 
+        String userNameWithDomain = preferredUserNameValue;
+        if (!preferredUserNameValue.contains(UserCoreConstants.DOMAIN_SEPARATOR)) {
+            String domainName = userStoreManager.getRealmConfiguration()
+                    .getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME);
+            userNameWithDomain = domainName + UserCoreConstants.DOMAIN_SEPARATOR + preferredUserNameValue;
+        }
         String userName;
         boolean authenticated =
                 authenticationResult.getAuthenticationStatus() == AuthenticationResult.AuthenticationStatus.SUCCESS;
         if (authenticated) {
             userName = authenticationResult.getAuthenticatedUser().get().getUsername();
         } else {
-            String[] users = userStoreManager.getUserList(preferredUserNameClaim, preferredUserNameValue, null);
+            String[] users = userStoreManager.getUserList(preferredUserNameClaim, userNameWithDomain, null);
             if (users.length == 1) {
                 userName = UserCoreUtil.removeDomainFromName(users[0]);
             } else {

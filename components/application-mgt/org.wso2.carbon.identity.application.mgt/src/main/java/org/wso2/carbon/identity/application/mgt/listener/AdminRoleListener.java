@@ -24,6 +24,8 @@ import org.wso2.carbon.identity.api.resource.mgt.APIResourceMgtException;
 import org.wso2.carbon.identity.application.common.model.Scope;
 import org.wso2.carbon.identity.application.mgt.ApplicationConstants;
 import org.wso2.carbon.identity.application.mgt.internal.ApplicationManagementServiceComponentHolder;
+import org.wso2.carbon.identity.organization.management.service.exception.OrganizationManagementException;
+import org.wso2.carbon.identity.organization.management.service.util.OrganizationManagementUtil;
 import org.wso2.carbon.identity.role.v2.mgt.core.RoleConstants;
 import org.wso2.carbon.identity.role.v2.mgt.core.RoleManagementService;
 import org.wso2.carbon.identity.role.v2.mgt.core.exception.IdentityRoleManagementException;
@@ -35,6 +37,10 @@ import org.wso2.carbon.user.api.UserStoreException;
 
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static org.wso2.carbon.identity.application.mgt.ApplicationConstants.DEFAULT_BLOCKED_SCOPES;
+import static org.wso2.carbon.identity.role.v2.mgt.core.RoleConstants.CONSOLE_ORG_SCOPE_PREFIX;
+import static org.wso2.carbon.identity.role.v2.mgt.core.RoleConstants.INTERNAL_ORG_SCOPE_PREFIX;
 
 /**
  * Admin role listener to populate organization admin role and console application Administrator role permissions.
@@ -65,12 +71,26 @@ public class AdminRoleListener extends AbstractRoleManagementListener {
                         .getAPIResourceManager().getSystemAPIScopes(tenantDomain);
                 List<Permission> systemPermissions = systemScopes.stream().map(scope -> new Permission(scope.getName(),
                         scope.getDisplayName(), scope.getApiID())).collect(Collectors.toList());
+                if (OrganizationManagementUtil.isOrganization(tenantDomain)) {
+                    // Removing the scopes which are not valid for sub organization context.
+                    systemPermissions =
+                            systemPermissions.stream().filter(permission ->
+                                    isValidSubOrgPermission(permission.getName())).collect(Collectors.toList());
+                }
                 role.setPermissions(systemPermissions);
             } catch (APIResourceMgtException e) {
                 throw new IdentityRoleManagementException("Error while retrieving internal scopes for tenant " +
                         "domain : " + tenantDomain, e);
+            } catch (OrganizationManagementException e) {
+                throw new IdentityRoleManagementException("Error while retrieving context for the sub org: " +
+                        tenantDomain, e);
             }
         }
+    }
+
+    private boolean isValidSubOrgPermission(String permission) {
+
+        return (permission.startsWith(INTERNAL_ORG_SCOPE_PREFIX) || permission.startsWith(CONSOLE_ORG_SCOPE_PREFIX));
     }
 
     @Override
@@ -105,7 +125,12 @@ public class AdminRoleListener extends AbstractRoleManagementListener {
             try {
                 List<Scope> systemScopes = ApplicationManagementServiceComponentHolder.getInstance()
                         .getAPIResourceManager().getSystemAPIScopes(tenantDomain);
-                permissions.addAll(systemScopes.stream().map(Scope::getName).collect(Collectors.toList()));
+                permissions.addAll(
+                        systemScopes.stream()
+                                .map(Scope::getName)
+                                // Impersonate scope should not be given by default even for an admin.
+                                .filter(name -> !DEFAULT_BLOCKED_SCOPES.contains(name))
+                                .collect(Collectors.toList()));
             } catch (APIResourceMgtException e) {
                 throw new IdentityRoleManagementException("Error while retrieving internal scopes for tenant " +
                         "domain : " + tenantDomain, e);
@@ -140,10 +165,13 @@ public class AdminRoleListener extends AbstractRoleManagementListener {
         RoleManagementService roleManagementService = ApplicationManagementServiceComponentHolder.getInstance()
                 .getRoleManagementServiceV2();
         RoleBasicInfo role = roleManagementService.getRoleBasicInfoById(roleId, tenantDomain);
-        if (StringUtils.equals(getOrgAdminRoleName(), (role.getName()))) {
-            return role.getAudience().equals(RoleConstants.ORGANIZATION);
-        } else if (RoleConstants.ADMINISTRATOR.equals(role.getName())) {
-            return role.getAudienceName().equals(ApplicationConstants.CONSOLE_APPLICATION_NAME);
+        if (StringUtils.equals(getOrgAdminRoleName(), (role.getName())) &&
+                role.getAudience().equals(RoleConstants.ORGANIZATION)) {
+            return true;
+        }
+        if (RoleConstants.ADMINISTRATOR.equals(role.getName()) &&
+                role.getAudienceName().equals(ApplicationConstants.CONSOLE_APPLICATION_NAME)) {
+            return true;
         }
         return false;
     }

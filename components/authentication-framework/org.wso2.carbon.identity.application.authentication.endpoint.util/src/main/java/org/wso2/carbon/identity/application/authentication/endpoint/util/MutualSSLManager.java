@@ -48,9 +48,9 @@ import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
-import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Map;
 import java.util.Properties;
@@ -108,8 +108,10 @@ public class MutualSSLManager {
                 File configFile = new File(configFilePath);
 
                 if (configFile.exists()) {
-                    log.info(Constants.TenantConstants.CONFIG_FILE_NAME + " file loaded from " +
-                            Constants.TenantConstants.CONFIG_RELATIVE_PATH);
+                    if (log.isDebugEnabled()) {
+                        log.debug(Constants.TenantConstants.CONFIG_FILE_NAME + " file loaded from " +
+                                Constants.TenantConstants.CONFIG_RELATIVE_PATH);
+                    }
                     try (InputStream inputStream = new FileInputStream(configFile)) {
 
                         prop.load(inputStream);
@@ -185,7 +187,7 @@ public class MutualSSLManager {
      *
      * @return availability of mutualSSLManagerEnabled feature.
      */
-    private static boolean isMutualSSLManagerEnabled(String mutualSSLManagerEnabled) {
+    protected static boolean isMutualSSLManagerEnabled(String mutualSSLManagerEnabled) {
 
         boolean isMutualSSLManagerEnabled = true;
         if (StringUtils.isNotEmpty(mutualSSLManagerEnabled)) {
@@ -201,7 +203,7 @@ public class MutualSSLManager {
      * @return Absolute file path
      * @throws IOException
      */
-    private static String buildFilePath(String path) throws IOException {
+    protected static String buildFilePath(String path) throws IOException {
 
         if (StringUtils.isNotEmpty(path) && path.startsWith(Constants.TenantConstants.RELATIVE_PATH_START_CHAR)) {
             // Relative file path is given
@@ -310,12 +312,12 @@ public class MutualSSLManager {
         try {
             String fileExtension = keyStorePath.substring(keyStorePath.lastIndexOf("."));
             MutualSSLManager.keyStorePassword = keyStorePassword.toCharArray();
-            keyStore = KeyStore.getInstance(KeystoreUtils.getFileTypeByExtension(fileExtension));
+            keyStore = KeystoreUtils.getKeystoreInstance(KeystoreUtils.getFileTypeByExtension(fileExtension));
             try (InputStream fis = new FileInputStream(keyStorePath)) {
                 keyStore.load(fis, MutualSSLManager.keyStorePassword);
             }
-        } catch (KeyStoreException | CertificateException | NoSuchAlgorithmException | IOException |
-                 CarbonException e) {
+        } catch (KeyStoreException | NoSuchProviderException | CertificateException | NoSuchAlgorithmException |
+                 IOException | CarbonException e) {
             throw new AuthenticationException("Error while trying to load Key Store.", e);
         }
     }
@@ -331,11 +333,12 @@ public class MutualSSLManager {
             throws AuthenticationException {
 
         try {
-            trustStore = KeyStore.getInstance(trustStoreType);
+            trustStore = KeystoreUtils.getKeystoreInstance(trustStoreType);
             try (InputStream is = new FileInputStream(trustStorePath)) {
                 trustStore.load(is, trustStorePassword.toCharArray());
             }
-        } catch (KeyStoreException | CertificateException | IOException | NoSuchAlgorithmException e) {
+        } catch (KeyStoreException | NoSuchProviderException | CertificateException | IOException |
+                 NoSuchAlgorithmException e) {
             throw new AuthenticationException("Error while trying to load Trust Store.", e);
         }
     }
