@@ -189,7 +189,7 @@ public class InputValidationService {
         context.getUserInputData().forEach(
                 (key, value) -> {
                     if (key.startsWith(CLAIM_URI_PREFIX)) {
-                        context.getFlowUser().addClaim(key, value);
+                        context.getFlowUser().addUpdatedClaim(key, value);
                     }
                 }
         );
