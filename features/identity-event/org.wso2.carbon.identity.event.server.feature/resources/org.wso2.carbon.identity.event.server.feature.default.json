@@ -452,6 +452,16 @@
   "identity_mgt.events.schemes.moesifOrgSwitchPublisher.subscriptions": [
     "POST_ORGANIZATION_SWITCH_EVENT"
   ],
+  "identity_mgt.events.schemes.moesifUserSessionPublisher.module_index": "69",
+  "identity_mgt.events.schemes.moesifUserSessionPublisher.properties.enable": false,
+  "identity_mgt.events.schemes.moesifUserSessionPublisher.subscriptions": [
+    "SESSION_CREATE", "SESSION_TERMINATE", "SESSION_UPDATE"
+  ],
+  "identity_mgt.events.schemes.moesifOAuthTokenIssuancePublisher.module_index": "70",
+  "identity_mgt.events.schemes.moesifOAuthTokenIssuancePublisher.properties.enable": false,
+  "identity_mgt.events.schemes.moesifOAuthTokenIssuancePublisher.subscriptions": [
+    "POST_ISSUE_ACCESS_TOKEN_V2"
+  ],
   "identity_mgt.events.schemes.authorizedScopesCacheInvalidationHandler.module_index": "64",
   "identity_mgt.events.schemes.authorizedScopesCacheInvalidationHandler.subscriptions": [
     "POST_DELETE_API_RESOURCE",
