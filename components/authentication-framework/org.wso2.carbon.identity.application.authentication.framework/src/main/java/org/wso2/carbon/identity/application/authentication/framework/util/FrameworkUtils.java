@@ -2132,11 +2132,11 @@ public class FrameworkUtils {
         List<String> queryParams;
         String action;
         if (!configAvailable) {
-            queryParams = Arrays.asList("loggedInUser", "ske", "pushEnrollData");
+            queryParams = new ArrayList<>(Arrays.asList("loggedInUser", "ske", "pushEnrollData"));
             action = "exclude";
         } else {
-            queryParams = FileBasedConfigurationBuilder.getInstance()
-                    .getAuthEndpointRedirectParams();
+            queryParams = new ArrayList<>(FileBasedConfigurationBuilder.getInstance()
+                    .getAuthEndpointRedirectParams());
             action = FileBasedConfigurationBuilder.getInstance()
                     .getAuthEndpointRedirectParamsAction();
         }
