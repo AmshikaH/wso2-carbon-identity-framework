@@ -229,6 +229,7 @@ public class FlowExecutionEngine {
                     .requiredParams(nodeResponse.getRequiredData())
                     .optionalParams(nodeResponse.getOptionalData())
                     .additionalData(nodeResponse.getAdditionalInfo())
+                    .messages(nodeResponse.getMessages())
                     .build();
             handleError(finalDataDTO, nodeResponse);
         }
