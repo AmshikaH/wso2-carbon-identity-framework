@@ -44,6 +44,7 @@ import org.wso2.carbon.identity.application.authentication.framework.cache.Sessi
 import org.wso2.carbon.identity.application.authentication.framework.cache.SessionContextCacheEntry;
 import org.wso2.carbon.identity.application.authentication.framework.cache.SessionContextCacheKey;
 import org.wso2.carbon.identity.application.authentication.framework.config.ConfigurationFacade;
+import org.wso2.carbon.identity.application.authentication.framework.config.builder.FileBasedConfigurationBuilder;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.ApplicationConfig;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.ExternalIdPConfig;
 import org.wso2.carbon.identity.application.authentication.framework.config.model.SequenceConfig;
@@ -101,6 +102,7 @@ import org.wso2.carbon.user.core.common.User;
 import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.user.core.tenant.TenantManager;
 
+import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -1579,6 +1581,119 @@ public class FrameworkUtilsTest extends IdentityBaseTest {
                     .preprocessUsernameWithContextTenantDomain("alice@example.com", context);
 
             assertEquals(processedUsername, "alice@example.com");
+        }
+    }
+
+    @DataProvider(name = "credentialParamProvider")
+    public Object[][] credentialParamProvider() {
+
+        return new Object[][]{
+                {"client_secret", "topSecretValue"},
+                {"client_assertion", "eyJhbGciOiJSUzI1NiJ9.assertion.signature"},
+                {"client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"}
+        };
+    }
+
+    @Test(dataProvider = "credentialParamProvider")
+    public void testGetRedirectURLWithFilteredParamsExcludesCredentialParam(String paramName, String paramValue) {
+
+        FileBasedConfigurationBuilder mockBuilder = mock(FileBasedConfigurationBuilder.class);
+        when(mockBuilder.isAuthEndpointRedirectParamsConfigAvailable()).thenReturn(false);
+        when(mockBuilder.getFilteringEnabledHostNames()).thenReturn(Collections.emptyList());
+
+        try (MockedStatic<FileBasedConfigurationBuilder> fileBasedConfig =
+                     mockStatic(FileBasedConfigurationBuilder.class)) {
+            fileBasedConfig.when(FileBasedConfigurationBuilder::getInstance).thenReturn(mockBuilder);
+
+            String redirectUrl = "https://localhost:9443/authenticationendpoint/login.do?sessionDataKey=dummyKey&"
+                    + paramName + "=" + paramValue;
+            Map<String, Serializable> dataStoreMap = new HashMap<>();
+
+            String filteredUrl = FrameworkUtils.getRedirectURLWithFilteredParams(redirectUrl, dataStoreMap);
+
+            assertFalse(filteredUrl.contains(paramName + "="),
+                    paramName + " should be removed from the redirect URL.");
+            assertTrue(filteredUrl.contains("sessionDataKey=dummyKey"),
+                    "sessionDataKey is mandatory and should remain in the redirect URL.");
+            assertNull(dataStoreMap.get(paramName),
+                    paramName + " should not be persisted in the data store map.");
+        }
+    }
+
+    @Test
+    public void testGetRedirectURLWithFilteredParamsExcludesAllCredentialParams() {
+
+        FileBasedConfigurationBuilder mockBuilder = mock(FileBasedConfigurationBuilder.class);
+        when(mockBuilder.isAuthEndpointRedirectParamsConfigAvailable()).thenReturn(false);
+        when(mockBuilder.getFilteringEnabledHostNames()).thenReturn(Collections.emptyList());
+
+        try (MockedStatic<FileBasedConfigurationBuilder> fileBasedConfig =
+                     mockStatic(FileBasedConfigurationBuilder.class)) {
+            fileBasedConfig.when(FileBasedConfigurationBuilder::getInstance).thenReturn(mockBuilder);
+
+            String redirectUrl = "https://localhost:9443/authenticationendpoint/login.do?"
+                    + "client_id=myClient&client_secret=topSecret&client_assertion=jwtAssertion&"
+                    + "client_assertion_type=jwtBearer&sessionDataKey=dummyKey&scope=openid";
+            Map<String, Serializable> dataStoreMap = new HashMap<>();
+
+            String filteredUrl = FrameworkUtils.getRedirectURLWithFilteredParams(redirectUrl, dataStoreMap);
+
+            // Credential params are removed from the redirect URL.
+            assertFalse(filteredUrl.contains("client_secret"),
+                    "client_secret should be removed from the redirect URL.");
+            assertFalse(filteredUrl.contains("client_assertion"),
+                    "client_assertion and client_assertion_type should be removed from the redirect URL.");
+
+            // Non-credential params are retained in the redirect URL.
+            assertTrue(filteredUrl.contains("client_id=myClient"), "client_id should be retained.");
+            assertTrue(filteredUrl.contains("sessionDataKey=dummyKey"), "sessionDataKey should be retained.");
+            assertTrue(filteredUrl.contains("scope=openid"), "scope should be retained.");
+
+            // Credential params are not persisted in the data store map.
+            assertNull(dataStoreMap.get("client_secret"));
+            assertNull(dataStoreMap.get("client_assertion"));
+            assertNull(dataStoreMap.get("client_assertion_type"));
+        }
+    }
+
+    @Test
+    public void testGetRedirectURLWithFilteredParamsExcludesCredentialParamsInIncludeMode() {
+
+        FileBasedConfigurationBuilder mockBuilder = mock(FileBasedConfigurationBuilder.class);
+        // Config available with the "include" action - queryParams act as an allow-list.
+        when(mockBuilder.isAuthEndpointRedirectParamsConfigAvailable()).thenReturn(true);
+        when(mockBuilder.getAuthEndpointRedirectParamsAction()).thenReturn("include");
+        // client_secret is even explicitly allow-listed, but must still be stripped.
+        when(mockBuilder.getAuthEndpointRedirectParams())
+                .thenReturn(Arrays.asList("client_id", "scope", "client_secret"));
+        when(mockBuilder.getFilteringEnabledHostNames()).thenReturn(Collections.emptyList());
+
+        try (MockedStatic<FileBasedConfigurationBuilder> fileBasedConfig =
+                     mockStatic(FileBasedConfigurationBuilder.class)) {
+            fileBasedConfig.when(FileBasedConfigurationBuilder::getInstance).thenReturn(mockBuilder);
+
+            String redirectUrl = "https://localhost:9443/authenticationendpoint/login.do?"
+                    + "client_id=myClient&client_secret=topSecret&client_assertion=jwtAssertion&"
+                    + "client_assertion_type=jwtBearer&sessionDataKey=dummyKey&scope=openid";
+            Map<String, Serializable> dataStoreMap = new HashMap<>();
+
+            String filteredUrl = FrameworkUtils.getRedirectURLWithFilteredParams(redirectUrl, dataStoreMap);
+
+            // Credential params are removed even in include mode (and even when allow-listed).
+            assertFalse(filteredUrl.contains("client_secret"),
+                    "client_secret should be removed even in include mode.");
+            assertFalse(filteredUrl.contains("client_assertion"),
+                    "client_assertion and client_assertion_type should be removed even in include mode.");
+
+            // Allow-listed non-credential params remain in the redirect URL.
+            assertTrue(filteredUrl.contains("client_id=myClient"), "client_id should be retained.");
+            assertTrue(filteredUrl.contains("sessionDataKey=dummyKey"), "sessionDataKey should be retained.");
+            assertTrue(filteredUrl.contains("scope=openid"), "scope should be retained.");
+
+            // Credential params are not persisted in the data store map.
+            assertNull(dataStoreMap.get("client_secret"));
+            assertNull(dataStoreMap.get("client_assertion"));
+            assertNull(dataStoreMap.get("client_assertion_type"));
         }
     }
 
