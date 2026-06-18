@@ -279,6 +279,12 @@ public class FrameworkUtils {
     private static final String ENABLE_NESTED_REDIRECT_PARAMS_IN_LOGOUT_RETURN_URL =
             "CommonAuthCallerPath.EnableNestedRedirectParams";
 
+    private static final String[] CREDENTIAL_PARAMS = {
+            "client_secret",
+            "client_assertion",
+            "client_assertion_type"
+    };
+
     private FrameworkUtils() {
     }
 
@@ -2141,8 +2147,9 @@ public class FrameworkUtils {
                     .getAuthEndpointRedirectParamsAction();
         }
 
-        List<String> mandatoryQueryParamsToExclude = Arrays.asList("client_secret");
-        queryParams.addAll(mandatoryQueryParamsToExclude);
+        // Credential params must never be sent to the authentication endpoint, regardless of the configured
+        // action (exclude/include). They are always stripped from the redirect URL.
+        List<String> credentialParams = Arrays.asList(CREDENTIAL_PARAMS);
 
         URIBuilder uriBuilder;
 
@@ -2187,7 +2194,13 @@ public class FrameworkUtils {
                         continue;
                     }
 
-                    if (queryParams.contains(paramName)) {
+                    if (credentialParams.contains(paramName)) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(paramName + " is a credential parameter, hence removing from url without " +
+                                    "persisting it.");
+                        }
+                        iterator.remove();
+                    } else if (queryParams.contains(paramName)) {
                         if (log.isDebugEnabled()) {
                             log.debug(paramName + " is in exclude list, hence removing from url and making " +
                                     "available via API");
@@ -2210,7 +2223,13 @@ public class FrameworkUtils {
                         continue;
                     }
 
-                    if (!queryParams.contains(paramName)) {
+                    if (credentialParams.contains(paramName)) {
+                        if (log.isDebugEnabled()) {
+                            log.debug(paramName + " is a credential parameter, hence removing from url without " +
+                                    "persisting it.");
+                        }
+                        iterator.remove();
+                    } else if (!queryParams.contains(paramName)) {
                         if (log.isDebugEnabled()) {
                             log.debug(paramName + " is not in include list, hence removing from url and making " +
                                     "available via API");
