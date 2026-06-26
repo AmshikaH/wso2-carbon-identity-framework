@@ -3097,6 +3097,7 @@
             <StreamVersion>1.0.0</StreamVersion>
             <InlineBody></InlineBody>
             <Enabled>false</Enabled>
+            <AlwaysPublish>false</AlwaysPublish>
         </Moesif>
     </Analytics>
 </Server>

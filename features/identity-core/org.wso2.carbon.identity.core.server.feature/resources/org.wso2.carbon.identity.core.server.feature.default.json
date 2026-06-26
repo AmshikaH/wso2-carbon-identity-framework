@@ -2374,5 +2374,6 @@
   "analytics.moesif.stream_name": "org.wso2.is.analytics.stream.MoesifData",
   "analytics.moesif.stream_version": "1.0.0",
   "analytics.moesif.inline_body": "",
-  "analytics.moesif.enabled": false
+  "analytics.moesif.enabled": false,
+  "analytics.moesif.always_publish": false
 }
