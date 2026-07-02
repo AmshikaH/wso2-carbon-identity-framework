@@ -3064,6 +3064,7 @@
     </NotificationChannel>
     <PASTRCookieMaxAge>-1</PASTRCookieMaxAge>
     <MarkStepCompletedOnInterrupt>true</MarkStepCompletedOnInterrupt>
+    <ReturnRolesInSaaSAppsInIDToken>false</ReturnRolesInSaaSAppsInIDToken>
 
     <TenantLevelAuthenticationConfigForAuthSequence>true</TenantLevelAuthenticationConfigForAuthSequence>
     <WorkflowEngine>
