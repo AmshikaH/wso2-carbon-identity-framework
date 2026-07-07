@@ -108,10 +108,9 @@ public class PolicyConsentPostAuthnHandler extends AbstractPostAuthnHandler {
             return PostAuthnHandlerFlowStatus.SUCCESS_COMPLETED;
         }
 
-        if (authenticatedUser.isFederatedUser() || authenticatedUser.isSharedUser()) {
+        if (authenticatedUser.isFederatedUser()) {
             if (LOG.isDebugEnabled()) {
-                String userType = authenticatedUser.isFederatedUser() ? "Federated" : "Shared";
-                LOG.debug(userType + " user detected. Skipping policy consent handling for user: "
+                LOG.debug("Federated user detected. Skipping policy consent handling for user: "
                         + (LoggerUtils.isLogMaskingEnable ? LoggerUtils.getMaskedContent(
                         authenticatedUser.getAuthenticatedSubjectIdentifier())
                         : authenticatedUser.getAuthenticatedSubjectIdentifier()));

@@ -130,7 +130,6 @@ public class PolicyConsentPostAuthnHandlerTest {
         when(authenticatedUser.getUserName()).thenReturn(SUBJECT_ID);
         when(authenticatedUser.getTenantDomain()).thenReturn(TENANT_DOMAIN);
         when(authenticatedUser.isFederatedUser()).thenReturn(false);
-        when(authenticatedUser.isSharedUser()).thenReturn(false);
 
         ApplicationConfig appConfig = mock(ApplicationConfig.class);
         when(appConfig.getServiceProvider()).thenReturn(serviceProvider);
@@ -234,17 +233,6 @@ public class PolicyConsentPostAuthnHandlerTest {
     public void testHandleSkipsForFederatedUser() throws Exception {
 
         when(authenticatedUser.isFederatedUser()).thenReturn(true);
-
-        PostAuthnHandlerFlowStatus status = handler.handle(request, response, context);
-
-        assertEquals(status, PostAuthnHandlerFlowStatus.SUCCESS_COMPLETED);
-        verify(response, never()).sendRedirect(anyString());
-    }
-
-    @Test(description = "Returns SUCCESS_COMPLETED immediately for shared users.")
-    public void testHandleSkipsForSharedUser() throws Exception {
-
-        when(authenticatedUser.isSharedUser()).thenReturn(true);
 
         PostAuthnHandlerFlowStatus status = handler.handle(request, response, context);
 
