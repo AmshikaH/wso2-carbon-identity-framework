@@ -2285,7 +2285,10 @@
 
   "webhooks.maximum_webhooks_per_tenant": "10",
   "webhooks.registration.skip_signup_confirmation_if_account_lock_disabled": true,
-  "webhooks.event_profiles.disabled_channels": [],
+  "webhooks.event_profiles.disabled_channels": [
+    "https://schemas.identity.wso2.org/events/consent-purpose",
+    "https://schemas.identity.wso2.org/events/consent"
+  ],
 
   "oauth.authorize_all_scopes": false,
   "oauth.authorize_internal_scopes": false,
@@ -2320,7 +2323,7 @@
   "flow_execution.enable_legacy_password_recovery_flow": false,
   "flow_execution.enable_legacy_invited_user_registration_flow": false,
   "flow_execution.registration.display_claim_availability": false,
-  "consent_mgt.enable_v2_api": true,
+  "consent_mgt.enable_v2_api": false,
   "branding_configuration.custom_content.max_file_size": "1048576",
   "captcha.enable_captcha_for_local_otp_authenticators": true,
 
