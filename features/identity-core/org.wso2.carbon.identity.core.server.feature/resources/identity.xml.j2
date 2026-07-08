@@ -1604,6 +1604,8 @@
         <EnableSSOConsentManagement>{{authentication.consent.prompt}}</EnableSSOConsentManagement>
         <!--Specify whether consent should be prompted for subject claim uri if configured as a requested claim.-->
         <PromptSubjectClaimRequestedConsent>{{authentication.consent.subject.prompt}}</PromptSubjectClaimRequestedConsent>
+        <!--Specify whether consent V2 API related functionalities should be enabled.-->
+        <EnableV2API>{{consent_mgt.enable_v2_api}}</EnableV2API>
     </Consent>
 
     <SecurityTokenService>
@@ -2560,6 +2562,15 @@
         <Registration>
             <SkipSignupConfirmationIfAccountLockDisabled>{{webhooks.registration.skip_signup_confirmation_if_account_lock_disabled}}</SkipSignupConfirmationIfAccountLockDisabled>
         </Registration>
+        {% if webhooks.event_profiles.disabled_channels is defined %}
+        <EventProfiles>
+            <DisabledChannels>
+                {% for channel in webhooks.event_profiles.disabled_channels %}
+                <ChannelUri>{{channel}}</ChannelUri>
+                {% endfor %}
+            </DisabledChannels>
+        </EventProfiles>
+        {% endif %}
     </Webhooks>
 
     <LocalAuthenticators>

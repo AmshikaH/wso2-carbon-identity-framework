@@ -1426,6 +1426,7 @@
   "console.ui.routes.organizationEnabledRoutes.attributeDialects": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.attributeUpdateVerificationSettings": "v1.0.0",
   "console.ui.routes.organizationEnabledRoutes.branding": "v0.0.0",
+  "console.ui.routes.organizationEnabledRoutes.consents": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.consoleSettings": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.emailTemplates": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.flows": "v1.0.0",
@@ -1434,6 +1435,8 @@
   "console.ui.routes.organizationEnabledRoutes.groups": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.identityProviders": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.loginAndRegistration": "v1.0.0",
+  "console.ui.routes.organizationEnabledRoutes.preferenceManagement": "v0.0.0",
+  "console.ui.routes.organizationEnabledRoutes.mcpServers": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.oidcScopes": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.organizations": "v0.0.0",
   "console.ui.routes.organizationEnabledRoutes.password-recovery": "v1.0.0",
@@ -1619,11 +1622,36 @@
   "console.branding.scopes.read": ["internal_application_mgt_view"],
   "console.branding.scopes.update": ["internal_branding_preference_update"],
   "console.branding.scopes.delete": ["internal_branding_preference_update"],
+
+  "console.consents.enabled": "$ref{consent_mgt.enable_v2_api}",
+  "console.consents.scopes.feature": ["console:consents"],
+  "console.consents.disabled_features": [],
+  "console.consents.scopes.create": [
+    "internal_consent_mgt_element_create",
+    "internal_consent_mgt_purpose_create"
+  ],
+  "console.consents.scopes.read": [
+    "internal_application_mgt_view",
+    "internal_claim_meta_view",
+    "internal_consent_mgt_element_view",
+    "internal_consent_mgt_purpose_app_view",
+    "internal_consent_mgt_purpose_view"
+  ],
+  "console.consents.scopes.update": [
+    "internal_branding_preference_policy_update",
+    "internal_consent_mgt_purpose_app_create",
+    "internal_consent_mgt_purpose_app_delete",
+    "internal_consent_mgt_purpose_update"
+  ],
+  "console.consents.scopes.delete": [
+    "internal_consent_mgt_element_delete",
+    "internal_consent_mgt_purpose_delete"
+  ],
   "console.flows.enabled": true,
   "console.flows.scopes.feature": ["console:flows"],
   "console.flows.disabled_features": [],
   "console.flows.scopes.create": [],
-  "console.flows.scopes.read": ["internal_flow_view", "internal_governance_view"],
+  "console.flows.scopes.read": ["internal_flow_view", "internal_governance_view", "internal_consent_mgt_purpose_view"],
   "console.flows.scopes.update": ["internal_flow_update", "internal_governance_update"],
   "console.flows.scopes.delete": [],
   "console.certificates.enabled": true,
@@ -2105,6 +2133,8 @@
   "myaccount.approvals.enabled": true,
   "myaccount.approvals.scopes.read": ["internal_approval_task_view"],
   "myaccount.approvals.scopes.update": ["internal_approval_task_update"],
+  "myaccount.consents.enabled": "$ref{consent_mgt.enable_v2_api}",
+  "myaccount.consents.disabled_features": [],
   "myaccount.operations.scopes.create": [],
   "myaccount.operations.scopes.read": ["internal_humantask_view"],
   "myaccount.operations.scopes.update": [],
@@ -2255,6 +2285,10 @@
 
   "webhooks.maximum_webhooks_per_tenant": "10",
   "webhooks.registration.skip_signup_confirmation_if_account_lock_disabled": true,
+  "webhooks.event_profiles.disabled_channels": [
+    "https://schemas.identity.wso2.org/events/consent-purpose",
+    "https://schemas.identity.wso2.org/events/consent"
+  ],
 
   "oauth.authorize_all_scopes": false,
   "oauth.authorize_internal_scopes": false,
@@ -2289,6 +2323,7 @@
   "flow_execution.enable_legacy_password_recovery_flow": false,
   "flow_execution.enable_legacy_invited_user_registration_flow": false,
   "flow_execution.registration.display_claim_availability": false,
+  "consent_mgt.enable_v2_api": false,
   "branding_configuration.custom_content.max_file_size": "1048576",
   "captcha.enable_captcha_for_local_otp_authenticators": true,
 

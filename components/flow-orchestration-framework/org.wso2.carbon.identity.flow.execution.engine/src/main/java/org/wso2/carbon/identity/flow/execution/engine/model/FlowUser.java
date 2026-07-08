@@ -23,6 +23,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonSerializer;
@@ -46,9 +48,11 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -69,6 +73,7 @@ public class FlowUser implements Serializable {
     private static final String LOCAL_CREDENTIAL_EXISTS_CLAIM_URI = "http://wso2.org/claims/identity/localCredentialExists";
 
     private final Map<String, String> claims = new HashMap<>();
+    private List<UserConsent> userConsents = new ArrayList<>();
 
     private final Set<String> updatedClaimUris = new HashSet<>();
 
@@ -107,6 +112,18 @@ public class FlowUser implements Serializable {
     public Map<String, String> getClaims() {
 
         return claims;
+    }
+
+    public List<UserConsent> getUserConsents() {
+
+        return userConsents;
+    }
+
+    public void addUserConsents(List<UserConsent> consents) {
+
+        if (consents != null) {
+            this.userConsents.addAll(consents);
+        }
     }
 
     public void addClaims(Map<String, String> claims) {
@@ -245,6 +262,108 @@ public class FlowUser implements Serializable {
         username = UUID.randomUUID().toString();
         UserCoreUtil.setSkipUsernamePatternValidationThreadLocal(true);
         return username;
+    }
+
+    /**
+     * Holds the per-purpose consent data for a given purpose type collected during the flow.
+     */
+    public static class UserConsent implements Serializable {
+
+        private static final long serialVersionUID = -4631846306935565799L;
+        private static final String FIELD_PURPOSES = "purposes";
+        private static final String FIELD_ATTRIBUTES = "attributes";
+        private static final String FIELD_ID = "id";
+        private static final String FIELD_ACCEPTED = "accepted";
+
+        private String purposeType;
+        private List<ConsentPurpose> purposes = new ArrayList<>();
+
+        public UserConsent() {
+
+        }
+
+        public static List<UserConsent> fromJson(String jsonValue) {
+
+            List<UserConsent> consents = new ArrayList<>();
+            try {
+                JsonNode root = new ObjectMapper().readTree(jsonValue);
+                root.fields().forEachRemaining(typeEntry -> {
+                    UserConsent consent = new UserConsent();
+                    consent.purposeType = typeEntry.getKey();
+                    JsonNode purposesNode = typeEntry.getValue().path(FIELD_PURPOSES);
+                    if (purposesNode.isArray()) {
+                        for (JsonNode purposeNode : purposesNode) {
+                            ConsentPurpose cp = new ConsentPurpose();
+                            cp.setId(purposeNode.path(FIELD_ID).asText(null));
+                            cp.setAccepted(purposeNode.path(FIELD_ACCEPTED).asBoolean(false));
+                            List<String> acceptedAttrs = new ArrayList<>();
+                            purposeNode.path(FIELD_ATTRIBUTES).forEach(n -> acceptedAttrs.add(n.asText()));
+                            cp.setAttributes(acceptedAttrs);
+                            consent.purposes.add(cp);
+                        }
+                    }
+                    consents.add(consent);
+                });
+            } catch (IOException e) {
+                throw new IllegalArgumentException("Invalid consent payload.", e);
+            }
+            return consents;
+        }
+
+        public String getPurposeType() {
+
+            return purposeType;
+        }
+
+        public List<ConsentPurpose> getPurposes() {
+
+            return purposes;
+        }
+    }
+
+    /**
+     * Represents a single purpose entry within a consent type, including its purpose-level
+     * acceptance flag and the associated attribute ID list. When {@code accepted} is {@code true},
+     * the list contains the accepted attribute IDs; when {@code false}, it contains the rejected
+     * attribute IDs.
+     */
+    public static class ConsentPurpose implements Serializable {
+
+        private static final long serialVersionUID = 7812345678901234567L;
+
+        private String id;
+        private boolean accepted;
+        private List<String> attributes = new ArrayList<>();
+
+        public String getId() {
+
+            return id;
+        }
+
+        public void setId(String id) {
+
+            this.id = id;
+        }
+
+        public boolean isAccepted() {
+
+            return accepted;
+        }
+
+        public void setAccepted(boolean accepted) {
+
+            this.accepted = accepted;
+        }
+
+        public List<String> getAttributes() {
+
+            return attributes;
+        }
+
+        public void setAttributes(List<String> attributes) {
+
+            this.attributes = attributes != null ? attributes : new ArrayList<>();
+        }
     }
 
     /**
