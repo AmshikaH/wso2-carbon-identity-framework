@@ -4473,6 +4473,8 @@
             <!-- Configuration for allowing users to enable x5c parameter in JWKS response -->
             <EnableX5CInResponse>{{oauth.jwks_endpoint.enable_x5c_in_response | default(true)}}</EnableX5CInResponse>
             <IsX5tRequired>{{oauth.jwks_endpoint.is_x5t_required | default(false)}}</IsX5tRequired>
+            <!-- When true, jwks_uri fetches are enforced against the server OutboundRequestFilter blocked hosts. -->
+            <EnforceOutboundRequestFilter>{{oauth.jwks_endpoint.enforce_outbound_request_filter | default(false)}}</EnforceOutboundRequestFilter>
         </JWKSEndpoint>
     </JWTValidatorConfigs>
 
@@ -4892,6 +4894,18 @@
         {% endfor %}
     </ReverseProxyConfig>
     {% endif %}
+
+    <!-- Server-level outbound (egress) request filter, shared by every consumer (e.g. the OAuth2
+         JWKS endpoint fetch). No-op until configured: with an empty blocked hosts list every URL is
+         permitted, preserving the historical behaviour. When non-empty, the listed hosts are
+         blocked. -->
+    <OutboundRequestFilter>
+        {% if outbound_request_filter.blocked_hosts is defined %}
+        <BlockedHosts>
+            {% for host in outbound_request_filter.blocked_hosts %}<Host>{{host}}</Host>{% endfor %}
+        </BlockedHosts>
+        {% endif %}
+    </OutboundRequestFilter>
 
     <!-- Configuration for preserving the current session and token when updating the password. -->
     <PasswordUpdate>
