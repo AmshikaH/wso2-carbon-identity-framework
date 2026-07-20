@@ -1692,6 +1692,8 @@ INTO IDN_CONFIG_TYPE (ID, NAME, DESCRIPTION) VALUES
 ('82ab7001-fb0e-44da-9169-1f63e4964d9b', 'REMOTE_LOGGING_CONFIG', 'A resource type to store remote server logger configurations.')
 INTO IDN_CONFIG_TYPE (ID, NAME, DESCRIPTION) VALUES
 ('08fbc096-56c5-4ae6-9edc-54198a07e0dc', 'ISSUER_USAGE_SCOPE', 'A resource type to store issuer usage scope for organizations.')
+INTO IDN_CONFIG_TYPE (ID, NAME, DESCRIPTION) VALUES
+('4fed2813-cfa8-40b1-83e6-4ab85d7fcb16', 'DEVICE_MANAGEMENT', 'A resource type to keep tenant level configurations for user device management.')
 SELECT 1 FROM dual
 /
 CREATE TABLE IDN_CONFIG_RESOURCE (
@@ -2618,7 +2620,7 @@ CREATE TABLE IDN_PUSH_DEVICE_STORE (
     PROVIDER VARCHAR(45) NOT NULL,
     TENANT_ID INTEGER NOT NULL,
     PRIMARY KEY (ID),
-    UNIQUE (USER_ID)
+    UNIQUE (USER_ID, DEVICE_TOKEN, TENANT_ID)
 )
 /
 
