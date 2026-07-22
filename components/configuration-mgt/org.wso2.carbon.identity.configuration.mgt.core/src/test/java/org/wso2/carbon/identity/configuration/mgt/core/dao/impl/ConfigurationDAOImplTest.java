@@ -132,14 +132,14 @@ public class ConfigurationDAOImplTest {
     public void testGetFileById() throws Exception {
 
         // Test the successful retrieval of a file by its ID.
-        InputStream dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+        InputStream dbResourceFile = configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
         String result = new BufferedReader(new InputStreamReader(dbResourceFile, StandardCharsets.UTF_8))
                 .lines()
                 .collect(Collectors.joining("\n"));
         assertEquals(FILE_CONTENT, result);
         try (MockedStatic<JdbcUtils> mockedStatic = mockStatic(JdbcUtils.class, CALLS_REAL_METHODS)) {
             mockedStatic.when(JdbcUtils::isPostgreSQLDB).thenReturn(true);
-            dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+            dbResourceFile = configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
             result = new BufferedReader(new InputStreamReader(dbResourceFile, StandardCharsets.UTF_8))
                     .lines()
                     .collect(Collectors.joining("\n"));
@@ -147,7 +147,7 @@ public class ConfigurationDAOImplTest {
         }
 
         // Test the retrieval of a file with an invalid ID.
-        dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, "wrong-id");
+        dbResourceFile = configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, "wrong-id");
         assertNull(dbResourceFile);
 
         // Test the exception scenarios.
@@ -156,12 +156,12 @@ public class ConfigurationDAOImplTest {
                     DataAccessException.class);
         })) {
             assertThrows(ConfigurationManagementServerException.class,
-                    () -> configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
+                    () -> configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
         }
         try (MockedStatic<JdbcUtils> mockedStatic = mockStatic(JdbcUtils.class, CALLS_REAL_METHODS)) {
             mockedStatic.when(JdbcUtils::isPostgreSQLDB).thenThrow(DataAccessException.class);
             assertThrows(ConfigurationManagementServerException.class,
-                    () -> configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
+                    () -> configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
         }
         try (MockedStatic<JdbcUtils> mockedStatic = mockStatic(JdbcUtils.class, CALLS_REAL_METHODS)) {
             Blob blob = mock(Blob.class);
@@ -170,7 +170,7 @@ public class ConfigurationDAOImplTest {
             mockedStatic.when(JdbcUtils::getNewTemplate).thenReturn(jdbcTemplate);
             when(jdbcTemplate.withTransaction(any(ExecuteCallable.class))).thenReturn(blob);
             assertThrows(ConfigurationManagementServerException.class,
-                    () -> configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
+                    () -> configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
         }
     }
 

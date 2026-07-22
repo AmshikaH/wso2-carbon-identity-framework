@@ -234,10 +234,10 @@ public class CachedBackedConfigurationDAO implements ConfigurationDAO {
     }
 
     @Override
-    public InputStream getFileById(String resourceType, String resourceName, String fileId)
+    public InputStream getFileById(int tenantId, String resourceType, String resourceName, String fileId)
             throws ConfigurationManagementException {
 
-        return configurationDAO.getFileById(resourceType, resourceName, fileId);
+        return configurationDAO.getFileById(tenantId, resourceType, resourceName, fileId);
     }
 
     @Override
@@ -255,10 +255,10 @@ public class CachedBackedConfigurationDAO implements ConfigurationDAO {
     }
 
     @Override
-    public void deleteFileById(String resourceType, String resourceName, String fileId)
+    public void deleteFileById(int tenantId, String resourceType, String resourceName, String fileId)
             throws ConfigurationManagementException {
 
-        configurationDAO.deleteFileById(resourceType, resourceName, fileId);
+        configurationDAO.deleteFileById(tenantId, resourceType, resourceName, fileId);
     }
 
     @Override

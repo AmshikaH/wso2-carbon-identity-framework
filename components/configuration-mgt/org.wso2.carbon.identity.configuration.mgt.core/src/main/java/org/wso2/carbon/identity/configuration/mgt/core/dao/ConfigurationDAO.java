@@ -232,12 +232,13 @@ public interface ConfigurationDAO {
     /**
      * Get the file.
      *
+     * @param tenantId     Tenant id of the {@link Resource} owning the file.
      * @param resourceType resource type name.
      * @param resourceName resource name.
      * @param fileId       Id of the file.
      * @return {@link InputStream} for the given file id.
      */
-    InputStream getFileById(String resourceType, String resourceName, String fileId) throws
+    InputStream getFileById(int tenantId, String resourceType, String resourceName, String fileId) throws
             ConfigurationManagementException;
 
     /**
@@ -278,12 +279,13 @@ public interface ConfigurationDAO {
     /**
      * Delete the file.
      *
+     * @param tenantId     Tenant id of the {@link Resource} owning the file.
      * @param resourceType resource type name.
      * @param resourceName resource name.
      * @param fileId       Id of the file.
      * @return {@link InputStream} for the given file id.
      */
-    void deleteFileById(String resourceType, String resourceName, String fileId) throws
+    void deleteFileById(int tenantId, String resourceType, String resourceName, String fileId) throws
             ConfigurationManagementException;
 
     /**
