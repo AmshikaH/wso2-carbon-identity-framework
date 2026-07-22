@@ -232,7 +232,7 @@ public interface ConfigurationDAO {
     /**
      * Get the file.
      *
-     * @param tenantId     Tenant id of the {@link Resource} owning the file.
+     * @param tenantId     Tenant id of the {@link Resource}.
      * @param resourceType resource type name.
      * @param resourceName resource name.
      * @param fileId       Id of the file.
@@ -279,7 +279,7 @@ public interface ConfigurationDAO {
     /**
      * Delete the file.
      *
-     * @param tenantId     Tenant id of the {@link Resource} owning the file.
+     * @param tenantId     Tenant id of the {@link Resource}.
      * @param resourceType resource type name.
      * @param resourceName resource name.
      * @param fileId       Id of the file.
