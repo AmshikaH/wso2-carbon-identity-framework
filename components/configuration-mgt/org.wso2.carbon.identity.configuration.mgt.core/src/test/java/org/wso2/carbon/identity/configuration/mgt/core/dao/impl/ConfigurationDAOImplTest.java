@@ -133,14 +133,14 @@ public class ConfigurationDAOImplTest {
     public void testGetFileById() throws Exception {
 
         // Test the successful retrieval of a file by its ID.
-        InputStream dbResourceFile = configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+        InputStream dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
         String result = new BufferedReader(new InputStreamReader(dbResourceFile, StandardCharsets.UTF_8))
                 .lines()
                 .collect(Collectors.joining("\n"));
         assertEquals(FILE_CONTENT, result);
         try (MockedStatic<JdbcUtils> mockedStatic = mockStatic(JdbcUtils.class, CALLS_REAL_METHODS)) {
             mockedStatic.when(JdbcUtils::isPostgreSQLDB).thenReturn(true);
-            dbResourceFile = configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+            dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
             result = new BufferedReader(new InputStreamReader(dbResourceFile, StandardCharsets.UTF_8))
                     .lines()
                     .collect(Collectors.joining("\n"));
@@ -148,7 +148,7 @@ public class ConfigurationDAOImplTest {
         }
 
         // Test the retrieval of a file with an invalid ID.
-        dbResourceFile = configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, "wrong-id");
+        dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, "wrong-id");
         assertNull(dbResourceFile);
 
         // Test the exception scenarios.
@@ -157,12 +157,12 @@ public class ConfigurationDAOImplTest {
                     DataAccessException.class);
         })) {
             assertThrows(ConfigurationManagementServerException.class,
-                    () -> configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
+                    () -> configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
         }
         try (MockedStatic<JdbcUtils> mockedStatic = mockStatic(JdbcUtils.class, CALLS_REAL_METHODS)) {
             mockedStatic.when(JdbcUtils::isPostgreSQLDB).thenThrow(DataAccessException.class);
             assertThrows(ConfigurationManagementServerException.class,
-                    () -> configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
+                    () -> configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
         }
         try (MockedStatic<JdbcUtils> mockedStatic = mockStatic(JdbcUtils.class, CALLS_REAL_METHODS)) {
             Blob blob = mock(Blob.class);
@@ -171,27 +171,27 @@ public class ConfigurationDAOImplTest {
             mockedStatic.when(JdbcUtils::getNewTemplate).thenReturn(jdbcTemplate);
             when(jdbcTemplate.withTransaction(any(ExecuteCallable.class))).thenReturn(blob);
             assertThrows(ConfigurationManagementServerException.class,
-                    () -> configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
+                    () -> configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID));
         }
     }
 
-    @Test(description = "Test that getFileById does not return a file belonging to another tenant",
+    @Test(description = "Test that getFileByIdAndTenant does not return a file belonging to another tenant",
             dependsOnMethods = "testAddResource")
-    public void testGetFileByIdWithMismatchedTenant() throws Exception {
+    public void testGetFileByIdAndTenantWithMismatchedTenant() throws Exception {
 
         InputStream dbResourceFile =
-                configurationDAO.getFileById(OTHER_TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+                configurationDAO.getFileByIdAndTenant(OTHER_TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
         assertNull(dbResourceFile);
     }
 
-    @Test(description = "Test that deleteFileById does not delete a file belonging to another tenant",
+    @Test(description = "Test that deleteFileByIdAndTenant does not delete a file belonging to another tenant",
             dependsOnMethods = "testAddResource")
-    public void testDeleteFileByIdWithMismatchedTenant() throws Exception {
+    public void testDeleteFileByIdAndTenantWithMismatchedTenant() throws Exception {
 
-        configurationDAO.deleteFileById(OTHER_TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+        configurationDAO.deleteFileByIdAndTenant(OTHER_TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
 
-        InputStream dbResourceFile = configurationDAO.getFileById(TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME,
-                FILE_ID);
+        InputStream dbResourceFile = configurationDAO.getFileByIdAndTenant(TENANT_ID, RESOURCE_TYPE_NAME,
+                RESOURCE_NAME, FILE_ID);
         String result = new BufferedReader(new InputStreamReader(dbResourceFile, StandardCharsets.UTF_8))
                 .lines()
                 .collect(Collectors.joining("\n"));
@@ -217,7 +217,8 @@ public class ConfigurationDAOImplTest {
     }
 
     @Test(description = "Test deleteResourceByName method", dependsOnMethods = {"testAddResource", "testGetFileById",
-            "testGetFiles", "testGetFileByIdWithMismatchedTenant", "testDeleteFileByIdWithMismatchedTenant"})
+            "testGetFiles", "testGetFileByIdAndTenantWithMismatchedTenant",
+            "testDeleteFileByIdAndTenantWithMismatchedTenant"})
     public void testDeleteResourceByName() throws Exception {
 
         // Successfully delete a resource by its name.

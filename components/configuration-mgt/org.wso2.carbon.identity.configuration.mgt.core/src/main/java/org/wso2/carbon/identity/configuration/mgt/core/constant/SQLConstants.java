@@ -490,15 +490,35 @@ public class SQLConstants {
             + "?, ?, ?)";
     public static final String INSERT_FILE_SQL_H2 = "INSERT INTO IDN_CONFIG_FILE(ID, `VALUE`, RESOURCE_ID, NAME) VALUES(?, "
             + "?, ?, ?)";
+    /**
+     * @deprecated This query does not filter by tenant and may return a file belonging to a different tenant.
+     * Use {@link #GET_FILE_BY_ID_WITH_TENANT_ID_SQL} instead.
+     */
+    @Deprecated
     public static final String GET_FILE_BY_ID_SQL = "SELECT IDN_CONFIG_FILE.ID, IDN_CONFIG_FILE.VALUE, "
             + "IDN_CONFIG_FILE.RESOURCE_ID, IDN_CONFIG_FILE.NAME FROM IDN_CONFIG_FILE INNER JOIN IDN_CONFIG_RESOURCE ON "
             + "IDN_CONFIG_FILE.RESOURCE_ID = IDN_CONFIG_RESOURCE.ID INNER JOIN IDN_CONFIG_TYPE ON "
             + "IDN_CONFIG_RESOURCE.TYPE_ID = IDN_CONFIG_TYPE.ID where IDN_CONFIG_FILE.ID = ? and "
-            + "IDN_CONFIG_RESOURCE.NAME = ? and IDN_CONFIG_TYPE.NAME = ? AND IDN_CONFIG_RESOURCE.TENANT_ID = ?";
+            + "IDN_CONFIG_RESOURCE.NAME = ? and IDN_CONFIG_TYPE.NAME = ?";
+    /**
+     * @deprecated This query does not filter by tenant and may return a file belonging to a different tenant.
+     * Use {@link #GET_FILE_BY_ID_WITH_TENANT_ID_SQL_H2} instead.
+     */
+    @Deprecated
     public static final String GET_FILE_BY_ID_SQL_H2 = "SELECT IDN_CONFIG_FILE.ID, IDN_CONFIG_FILE.`VALUE`, "
             + "IDN_CONFIG_FILE.RESOURCE_ID, IDN_CONFIG_FILE.NAME FROM IDN_CONFIG_FILE INNER JOIN IDN_CONFIG_RESOURCE ON "
             + "IDN_CONFIG_FILE.RESOURCE_ID = IDN_CONFIG_RESOURCE.ID INNER JOIN IDN_CONFIG_TYPE ON "
             + "IDN_CONFIG_RESOURCE.TYPE_ID = IDN_CONFIG_TYPE.ID where IDN_CONFIG_FILE.ID = ? and "
+            + "IDN_CONFIG_RESOURCE.NAME = ? and IDN_CONFIG_TYPE.NAME = ?";
+    public static final String GET_FILE_BY_ID_WITH_TENANT_ID_SQL = "SELECT IDN_CONFIG_FILE.ID, IDN_CONFIG_FILE.VALUE, "
+            + "IDN_CONFIG_FILE.RESOURCE_ID, IDN_CONFIG_FILE.NAME FROM IDN_CONFIG_FILE INNER JOIN IDN_CONFIG_RESOURCE ON "
+            + "IDN_CONFIG_FILE.RESOURCE_ID = IDN_CONFIG_RESOURCE.ID INNER JOIN IDN_CONFIG_TYPE ON "
+            + "IDN_CONFIG_RESOURCE.TYPE_ID = IDN_CONFIG_TYPE.ID where IDN_CONFIG_FILE.ID = ? and "
+            + "IDN_CONFIG_RESOURCE.NAME = ? and IDN_CONFIG_TYPE.NAME = ? AND IDN_CONFIG_RESOURCE.TENANT_ID = ?";
+    public static final String GET_FILE_BY_ID_WITH_TENANT_ID_SQL_H2 = "SELECT IDN_CONFIG_FILE.ID, "
+            + "IDN_CONFIG_FILE.`VALUE`, IDN_CONFIG_FILE.RESOURCE_ID, IDN_CONFIG_FILE.NAME FROM IDN_CONFIG_FILE INNER "
+            + "JOIN IDN_CONFIG_RESOURCE ON IDN_CONFIG_FILE.RESOURCE_ID = IDN_CONFIG_RESOURCE.ID INNER JOIN "
+            + "IDN_CONFIG_TYPE ON IDN_CONFIG_RESOURCE.TYPE_ID = IDN_CONFIG_TYPE.ID where IDN_CONFIG_FILE.ID = ? and "
             + "IDN_CONFIG_RESOURCE.NAME = ? and IDN_CONFIG_TYPE.NAME = ? AND IDN_CONFIG_RESOURCE.TENANT_ID = ?";
     public static final String GET_FILES_BY_RESOURCE_ID_SQL = "SELECT\n" +
             "  ID,\n" +
@@ -507,8 +527,14 @@ public class SQLConstants {
             "  IDN_CONFIG_FILE\n" +
             "WHERE\n" +
             "  RESOURCE_ID = ?";
-    public static final String DELETE_FILE_SQL = "DELETE FROM IDN_CONFIG_FILE WHERE ID = ? AND RESOURCE_ID IN "
-            + "(SELECT ID FROM IDN_CONFIG_RESOURCE WHERE TENANT_ID = ?)";
+    /**
+     * @deprecated This query does not filter by tenant and may delete a file belonging to a different tenant.
+     * Use {@link #DELETE_FILE_WITH_TENANT_ID_SQL} instead.
+     */
+    @Deprecated
+    public static final String DELETE_FILE_SQL = "DELETE FROM IDN_CONFIG_FILE WHERE ID = ?";
+    public static final String DELETE_FILE_WITH_TENANT_ID_SQL = "DELETE FROM IDN_CONFIG_FILE WHERE ID = ? AND "
+            + "RESOURCE_ID IN (SELECT ID FROM IDN_CONFIG_RESOURCE WHERE TENANT_ID = ?)";
     public static final String DELETE_FILES_SQL = "DELETE FROM IDN_CONFIG_FILE WHERE RESOURCE_ID = ?";
     public static final String UPDATE_HAS_FILE_SQL = "UPDATE IDN_CONFIG_RESOURCE SET HAS_FILE = ? " +
             "WHERE ID = ?";

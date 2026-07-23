@@ -234,10 +234,18 @@ public class CachedBackedConfigurationDAO implements ConfigurationDAO {
     }
 
     @Override
-    public InputStream getFileById(int tenantId, String resourceType, String resourceName, String fileId)
+    @Deprecated
+    public InputStream getFileById(String resourceType, String resourceName, String fileId)
             throws ConfigurationManagementException {
 
-        return configurationDAO.getFileById(tenantId, resourceType, resourceName, fileId);
+        return configurationDAO.getFileById(resourceType, resourceName, fileId);
+    }
+
+    @Override
+    public InputStream getFileByIdAndTenant(int tenantId, String resourceType, String resourceName, String fileId)
+            throws ConfigurationManagementException {
+
+        return configurationDAO.getFileByIdAndTenant(tenantId, resourceType, resourceName, fileId);
     }
 
     @Override
@@ -255,10 +263,18 @@ public class CachedBackedConfigurationDAO implements ConfigurationDAO {
     }
 
     @Override
-    public void deleteFileById(int tenantId, String resourceType, String resourceName, String fileId)
+    @Deprecated
+    public void deleteFileById(String resourceType, String resourceName, String fileId)
             throws ConfigurationManagementException {
 
-        configurationDAO.deleteFileById(tenantId, resourceType, resourceName, fileId);
+        configurationDAO.deleteFileById(resourceType, resourceName, fileId);
+    }
+
+    @Override
+    public void deleteFileByIdAndTenant(int tenantId, String resourceType, String resourceName, String fileId)
+            throws ConfigurationManagementException {
+
+        configurationDAO.deleteFileByIdAndTenant(tenantId, resourceType, resourceName, fileId);
     }
 
     @Override
