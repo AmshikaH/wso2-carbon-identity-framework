@@ -373,6 +373,72 @@ public class IdentityManagementEndpointUtilTest {
         }
     }
 
+    @DataProvider(name = "getBasePathConfiguredServerUrlData")
+    public Object[][] getBasePathConfiguredServerUrlData() {
+
+        return new Object[][] {
+                // contextUrl (configured server URL — the buggy branch)
+                // inboundPath (the inbound request path seen by isServerURLAlreadyTenanted)
+                // tenantDomain
+                // isEndpointTenantAware
+                // expected value
+
+                // Inbound request is already tenant-qualified, but the configured (bare) server URL must still be
+                // tenant-qualified for a non-super, endpoint-tenant-aware call (the fix — the tenant must not be
+                // dropped by the inbound-path heuristic here).
+                { "https://foo.com",
+                  "/t/test.com/accountrecoveryendpoint/confirmregistration.do",
+                  SAMPLE_TENANT_DOMAIN,
+                  true,
+                  "https://foo.com/t/test.com/api/identity/recovery/v0.9"
+                },
+                // Super tenant: no /t/ prefix.
+                { "https://foo.com",
+                  "/t/test.com/accountrecoveryendpoint/confirmregistration.do",
+                  MultitenantConstants.SUPER_TENANT_DOMAIN_NAME,
+                  true,
+                  "https://foo.com/api/identity/recovery/v0.9"
+                },
+                // Not endpoint-tenant-aware: no /t/ prefix.
+                { "https://foo.com",
+                  "/t/test.com/accountrecoveryendpoint/confirmregistration.do",
+                  SAMPLE_TENANT_DOMAIN,
+                  false,
+                  "https://foo.com/api/identity/recovery/v0.9"
+                },
+                // Configured server URL already carries a tenant: no second /t/ prefix is added.
+                { "https://foo.com/t/test.com",
+                  "/t/test.com/accountrecoveryendpoint/confirmregistration.do",
+                  SAMPLE_TENANT_DOMAIN,
+                  true,
+                  "https://foo.com/t/test.com/api/identity/recovery/v0.9"
+                }
+        };
+    }
+
+    /**
+     * Regression coverage for the configured-server-URL branch of {@code getBasePath()}: it must tenant-qualify
+     * a configured (bare) server URL for non-super, endpoint-tenant-aware calls even when the inbound request
+     * path is already tenant-qualified, skipping only when the configured URL itself already carries a tenant.
+     * Previously the branch reused {@code isServerURLAlreadyTenanted()} (which inspects the inbound request path),
+     * wrongly dropping the {@code /t/<tenant>} prefix so the internal call resolved in {@code carbon.super}.
+     */
+    @Test(dataProvider = "getBasePathConfiguredServerUrlData")
+    public void testGetBasePathConfiguredServerUrl(String contextUrl, String inboundPath, String tenantDomain,
+            boolean isEndpointTenantAware, String expected) throws Exception {
+
+        String context = IdentityManagementEndpointConstants.UserInfoRecovery.RECOVERY_API_RELATIVE_PATH;
+        try (MockedStatic<IdentityTenantUtil> identityTenantUtil = mockStatic(IdentityTenantUtil.class);
+             MockedStatic<ServiceURLBuilder> serviceURLBuilder = mockStatic(ServiceURLBuilder.class)) {
+            prepareGetBasePathTest(contextUrl, context, identityTenantUtil,
+                    serviceURLBuilder, false, false);
+            // Simulate a tenant-qualified inbound request path, which is what triggered the original bug.
+            lenient().when(serviceURL.getPath()).thenReturn(inboundPath);
+            assertEquals(IdentityManagementEndpointUtil.getBasePath(tenantDomain, context, isEndpointTenantAware),
+                    expected);
+        }
+    }
+
     @DataProvider(name = "getBasePathUseOrgHandleFalseTestData")
     public Object[][] getBasePathUseOrgHandleFalseTestData() {
 
