@@ -50,6 +50,8 @@ public class WorkflowRequestDAOTest {
     private static final String TEST_REQUEST_ID_2 = "test_request_id_2";
     private static final String TEST_REQUEST_ID_3 = "test_request_id_3";
     private static final String INVALID_REQUEST_ID = "non_existent_id";
+    private static final int TEST_TENANT_ID = -1234;
+    private static final int OTHER_TENANT_ID = -5678;
 
     private static final String OPERATION_UPDATE_USER = "UPDATE_USER";
     private static final String OPERATION_ADD_USER = "ADD_USER";
@@ -132,7 +134,7 @@ public class WorkflowRequestDAOTest {
             identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
                     .thenReturn(getConnection());
 
-            WorkflowRequest result = workflowRequestDAO.getWorkflowRequest(requestId);
+            WorkflowRequest result = workflowRequestDAO.getWorkflowRequest(requestId, TEST_TENANT_ID);
 
             assertNotNull(result, "Workflow request should not be null for ID: " + requestId);
             assertEquals(result.getRequestId(), requestId, "Request ID mismatch");
@@ -154,7 +156,7 @@ public class WorkflowRequestDAOTest {
             identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
                     .thenReturn(getConnection());
 
-            workflowRequestDAO.getWorkflowRequest(INVALID_REQUEST_ID);
+            workflowRequestDAO.getWorkflowRequest(INVALID_REQUEST_ID, TEST_TENANT_ID);
         }
     }
 
@@ -165,7 +167,18 @@ public class WorkflowRequestDAOTest {
             identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
                     .thenReturn(getConnection());
 
-            workflowRequestDAO.getWorkflowRequest(null);
+            workflowRequestDAO.getWorkflowRequest(null, TEST_TENANT_ID);
+        }
+    }
+
+    @Test(expectedExceptions = WorkflowClientException.class)
+    public void testGetWorkflowRequestWithMismatchingTenantId() throws Exception {
+
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class)) {
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+
+            workflowRequestDAO.getWorkflowRequest(TEST_REQUEST_ID_2, OTHER_TENANT_ID);
         }
     }
 
@@ -176,20 +189,42 @@ public class WorkflowRequestDAOTest {
             identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
                     .thenReturn(getConnection());
 
-            WorkflowRequest requestBeforeDelete = workflowRequestDAO.getWorkflowRequest(TEST_REQUEST_ID_1);
+            WorkflowRequest requestBeforeDelete =
+                    workflowRequestDAO.getWorkflowRequest(TEST_REQUEST_ID_1, TEST_TENANT_ID);
             if (requestBeforeDelete == null) {
                 throw new Exception("Precondition failed: Request with ID " + TEST_REQUEST_ID_1 + " should exist.");
             }
 
             // Delete the request.
-            workflowRequestDAO.deleteRequest(TEST_REQUEST_ID_1);
+            workflowRequestDAO.deleteRequest(TEST_REQUEST_ID_1, TEST_TENANT_ID);
 
             // Verify the request no longer exists.
             try {
-                workflowRequestDAO.getWorkflowRequest(TEST_REQUEST_ID_1);
+                workflowRequestDAO.getWorkflowRequest(TEST_REQUEST_ID_1, TEST_TENANT_ID);
             } catch (WorkflowClientException e) {
                 // Expected exception since the request should be deleted.
                 assertNotNull(e, "Exception should be thrown for deleted request");
+            }
+        }
+    }
+
+    @Test(dependsOnMethods = "testDeleteRequestWithValidId", expectedExceptions = WorkflowClientException.class)
+    public void testDeleteRequestWithMismatchingTenantIdDoesNotDelete() throws Exception {
+
+        try (MockedStatic<IdentityDatabaseUtil> identityDatabaseUtil = mockStatic(IdentityDatabaseUtil.class)) {
+            identityDatabaseUtil.when(() -> IdentityDatabaseUtil.getDBConnection(anyBoolean()))
+                    .thenReturn(getConnection());
+
+            try {
+                // Attempt to delete a request that belongs to a different tenant; no row should be
+                // affected, so this must fail instead of silently deleting another tenant's request.
+                workflowRequestDAO.deleteRequest(TEST_REQUEST_ID_2, OTHER_TENANT_ID);
+            } finally {
+                // Verify the request still exists under its own tenant, regardless of the assertion above.
+                WorkflowRequest requestAfterDelete =
+                        workflowRequestDAO.getWorkflowRequest(TEST_REQUEST_ID_2, TEST_TENANT_ID);
+                assertNotNull(requestAfterDelete,
+                        "Request should not have been deleted when the tenant ID does not match");
             }
         }
     }
@@ -223,6 +258,8 @@ public class WorkflowRequestDAOTest {
         dataSource.setUrl("jdbc:h2:mem:test" + DB_NAME + ";DB_CLOSE_DELAY=-1");
         dataSource.setTestOnBorrow(true);
         dataSource.setValidationQuery("select 1");
+        dataSource.setMaxActive(50);
+        dataSource.setMaxWait(5000);
 
         try (Connection connection = dataSource.getConnection()) {
             connection.createStatement().executeUpdate("RUNSCRIPT FROM '" + scriptPath + "'");

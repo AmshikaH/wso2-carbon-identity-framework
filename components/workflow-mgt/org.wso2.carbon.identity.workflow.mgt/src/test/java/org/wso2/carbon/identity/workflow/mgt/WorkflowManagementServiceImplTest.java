@@ -246,9 +246,9 @@ public class WorkflowManagementServiceImplTest {
         expectedRequest.setUpdatedAt(updatedAt);
         expectedRequest.setStatus(status);
 
-        when(mockDAO.getWorkflowRequest(requestId)).thenReturn(expectedRequest);
+        when(mockDAO.getWorkflowRequest(requestId, TENANT_ID)).thenReturn(expectedRequest);
 
-        WorkflowRequest result = service.getWorkflowRequestBean(requestId);
+        WorkflowRequest result = service.getWorkflowRequestBean(requestId, TENANT_ID);
 
         assertNotNull(result, "Returned workflow request should not be null");
         assertEquals(result.getRequestId(), requestId, "Request ID should match");
@@ -256,21 +256,21 @@ public class WorkflowManagementServiceImplTest {
         assertEquals(result.getStatus(), status, "Status should match");
         assertEquals(result.getCreatedBy(), createdBy, "Created by should match");
 
-        verify(mockDAO).getWorkflowRequest(requestId);
+        verify(mockDAO).getWorkflowRequest(requestId, TENANT_ID);
     }
 
     @Test(expectedExceptions = WorkflowClientException.class)
     public void testGetWorkflowRequestWithInvalidId() throws Exception {
 
-        when(mockDAO.getWorkflowRequest(INVALID_REQUEST_ID))
+        when(mockDAO.getWorkflowRequest(INVALID_REQUEST_ID, TENANT_ID))
                 .thenThrow(new WorkflowClientException("Invalid request ID"));
-        service.getWorkflowRequestBean(INVALID_REQUEST_ID);
+        service.getWorkflowRequestBean(INVALID_REQUEST_ID, TENANT_ID);
     }
 
     @Test(expectedExceptions = WorkflowClientException.class)
     public void testGetWorkflowRequestWithNullId() throws Exception {
 
-        service.getWorkflowRequestBean(null);
+        service.getWorkflowRequestBean(null, TENANT_ID);
     }
 
     private void injectMockDAO(String fieldName, Object mockObject) throws Exception {
@@ -1172,8 +1172,9 @@ public class WorkflowManagementServiceImplTest {
                 WFConstant.HT_STATE_SKIPPED);
         verify(mockRequestEntityRelationshipDAO).deleteRelationshipsOfRequest(REQUEST_ID);
 
-        workflowManagementService.permanentlyDeleteWorkflowRequestByAnyUser(REQUEST_ID);
+        workflowManagementService.permanentlyDeleteWorkflowRequestByAnyUser(REQUEST_ID, TENANT_ID);
 
+        verify(mockWorkflowRequestDAO).deleteRequest(REQUEST_ID, TENANT_ID);
     }
 
     @Test
@@ -1322,7 +1323,7 @@ public class WorkflowManagementServiceImplTest {
     public void testGetWorkflowRequestBeanWithClaimsProcessing() throws Exception {
 
         WorkflowRequest mockWorkflowRequest = createWorkflowRequestWithClaims();
-        when(mockDAO.getWorkflowRequest(REQUEST_ID)).thenReturn(mockWorkflowRequest);
+        when(mockDAO.getWorkflowRequest(REQUEST_ID, TENANT_ID)).thenReturn(mockWorkflowRequest);
 
         ClaimMetadataManagementService mockClaimService = mock(ClaimMetadataManagementService.class);
         List<LocalClaim> mockLocalClaims = createMockLocalClaims();
@@ -1339,7 +1340,7 @@ public class WorkflowManagementServiceImplTest {
             mockedCarbonContext.when(CarbonContext::getThreadLocalCarbonContext).thenReturn(mockCarbonContext);
             when(mockCarbonContext.getTenantDomain()).thenReturn("carbon.super");
 
-            WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID);
+            WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID, TENANT_ID);
 
             assertNotNull(result, "Result should not be null");
             assertEquals(result.getRequestId(), REQUEST_ID);
@@ -1365,14 +1366,14 @@ public class WorkflowManagementServiceImplTest {
             verify(mockClaimService).getLocalClaims("carbon.super");
         }
 
-        verify(mockDAO).getWorkflowRequest(REQUEST_ID);
+        verify(mockDAO).getWorkflowRequest(REQUEST_ID, TENANT_ID);
     }
 
     @Test
     public void testGetWorkflowRequestBeanWithCredentialFiltering() throws Exception {
 
         WorkflowRequest mockWorkflowRequest = createWorkflowRequestWithCredentials();
-        when(mockDAO.getWorkflowRequest(REQUEST_ID)).thenReturn(mockWorkflowRequest);
+        when(mockDAO.getWorkflowRequest(REQUEST_ID, TENANT_ID)).thenReturn(mockWorkflowRequest);
 
         // Use existing mock infrastructure
         WorkflowServiceDataHolder mockHolder = mock(WorkflowServiceDataHolder.class);
@@ -1381,7 +1382,7 @@ public class WorkflowManagementServiceImplTest {
 
         mockedDataHolder.when(WorkflowServiceDataHolder::getInstance).thenReturn(mockHolder);
 
-        WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID);
+        WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID, TENANT_ID);
 
         assertNotNull(result);
         assertNotNull(result.getProperties());
@@ -1390,14 +1391,14 @@ public class WorkflowManagementServiceImplTest {
         assertEquals(result.getProperties().get(0).getKey(), "username");
         assertEquals(result.getProperties().get(0).getValue(), "testuser");
 
-        verify(mockDAO).getWorkflowRequest(REQUEST_ID);
+        verify(mockDAO).getWorkflowRequest(REQUEST_ID, TENANT_ID);
     }
 
     @Test
     public void testGetWorkflowRequestBeanWithEmptyProperties() throws Exception {
 
         WorkflowRequest mockWorkflowRequest = createWorkflowRequestWithEmptyProperties();
-        when(mockDAO.getWorkflowRequest(REQUEST_ID)).thenReturn(mockWorkflowRequest);
+        when(mockDAO.getWorkflowRequest(REQUEST_ID, TENANT_ID)).thenReturn(mockWorkflowRequest);
 
         // Use existing mock infrastructure
         WorkflowServiceDataHolder mockHolder = mock(WorkflowServiceDataHolder.class);
@@ -1406,14 +1407,14 @@ public class WorkflowManagementServiceImplTest {
 
         mockedDataHolder.when(WorkflowServiceDataHolder::getInstance).thenReturn(mockHolder);
 
-        WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID);
+        WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID, TENANT_ID);
 
         assertNotNull(result);
         assertEquals(result.getRequestId(), REQUEST_ID);
         assertNotNull(result.getProperties());
         assertEquals(result.getProperties().size(), 0);
 
-        verify(mockDAO).getWorkflowRequest(REQUEST_ID);
+        verify(mockDAO).getWorkflowRequest(REQUEST_ID, TENANT_ID);
     }
 
     // Helper methods for creating test data

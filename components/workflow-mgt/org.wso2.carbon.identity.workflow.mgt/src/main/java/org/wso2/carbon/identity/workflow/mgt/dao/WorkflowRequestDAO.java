@@ -244,7 +244,7 @@ public class WorkflowRequestDAO {
         }
     }
 
-    public void deleteRequest(String requestId) throws InternalWorkflowException {
+    public void deleteRequest(String requestId, int tenantId) throws WorkflowException {
 
         if (log.isDebugEnabled()) {
             log.debug("Deleting workflow request with ID: " + requestId);
@@ -256,7 +256,12 @@ public class WorkflowRequestDAO {
         try {
             prepStmt = connection.prepareStatement(query);
             prepStmt.setString(1, requestId);
-            prepStmt.execute();
+            prepStmt.setInt(2, tenantId);
+            int rowsAffected = prepStmt.executeUpdate();
+            if (rowsAffected == 0) {
+                IdentityDatabaseUtil.rollbackTransaction(connection);
+                throw new WorkflowClientException("Workflow request not found with ID: " + requestId);
+            }
             IdentityDatabaseUtil.commitTransaction(connection);
         } catch (SQLException e) {
             IdentityDatabaseUtil.rollbackTransaction(connection);
@@ -735,7 +740,7 @@ public class WorkflowRequestDAO {
      * @throws WorkflowClientException
      * @throws ClassNotFoundException
      */
-    public org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest getWorkflowRequest(String requestId)
+    public org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest getWorkflowRequest(String requestId, int tenantId)
             throws WorkflowException {
 
         if (requestId == null || requestId.isEmpty()) {
@@ -749,6 +754,7 @@ public class WorkflowRequestDAO {
         try {
             prepStmt = connection.prepareStatement(SQLConstants.GET_FULL_WORKFLOW_REQUEST_QUERY);
             prepStmt.setString(1, requestId);
+            prepStmt.setInt(2, tenantId);
             resultSet = prepStmt.executeQuery();
 
             if (resultSet.next()) {

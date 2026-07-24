@@ -1154,10 +1154,11 @@ public class WorkflowManagementServiceImpl implements WorkflowManagementService 
      * Permanently delete workflow request created by any user.
      *
      * @param requestId Request ID
+     * @param tenantId  Tenant ID.
      * @throws WorkflowException
      */
     @Override
-    public void permanentlyDeleteWorkflowRequestByAnyUser(String requestId) throws WorkflowException {
+    public void permanentlyDeleteWorkflowRequestByAnyUser(String requestId, int tenantId) throws WorkflowException {
 
         List<WorkflowListener> workflowListenerList =
                 WorkflowServiceDataHolder.getInstance().getWorkflowListenerList();
@@ -1171,7 +1172,7 @@ public class WorkflowManagementServiceImpl implements WorkflowManagementService 
             }
         }
 
-        workflowRequestDAO.deleteRequest(requestId);
+        workflowRequestDAO.deleteRequest(requestId, tenantId);
 
         for (WorkflowListener workflowListener : workflowListenerList) {
             if (workflowListener.isEnable()) {
@@ -1314,11 +1315,12 @@ public class WorkflowManagementServiceImpl implements WorkflowManagementService 
      * Retrieve a workflow request by its ID.
      *
      * @param requestId The ID of the workflow request to retrieve.
+     * @param tenantId  Tenant ID.
      * @return The workflow request with the specified ID.
      * @throws WorkflowException If an error occurs while retrieving the workflow request.
      */
     @Override
-    public WorkflowRequest getWorkflowRequestBean(String requestId) throws WorkflowException {
+    public WorkflowRequest getWorkflowRequestBean(String requestId, int tenantId) throws WorkflowException {
 
         if (requestId == null || requestId.isEmpty()) {
             throw new WorkflowClientException("Request ID cannot be null or empty.");
@@ -1332,7 +1334,7 @@ public class WorkflowManagementServiceImpl implements WorkflowManagementService 
             }
         }
 
-        WorkflowRequest workflowRequest = workflowRequestDAO.getWorkflowRequest(requestId);
+        WorkflowRequest workflowRequest = workflowRequestDAO.getWorkflowRequest(requestId, tenantId);
         if (workflowRequest == null) {
             String errorMessage = "Workflow request not found with ID: " + requestId;
             log.debug(errorMessage);

@@ -403,9 +403,10 @@ public interface WorkflowManagementService {
      * permanently delete workflow requests created by any user.
      *
      * @param requestId  Request ID.
+     * @param tenantId   Tenant ID.
      * @throws WorkflowException
      */
-    default void permanentlyDeleteWorkflowRequestByAnyUser(String requestId) throws WorkflowException {
+    default void permanentlyDeleteWorkflowRequestByAnyUser(String requestId, int tenantId) throws WorkflowException {
 
     }
 
@@ -469,11 +470,12 @@ public interface WorkflowManagementService {
      * Get workflow request bean from request ID.
      *
      * @param requestId Request ID.
+     * @param tenantId   Tenant ID.
      * @return WorkflowRequest bean.
      * @throws WorkflowException If an error occurs while retrieving the workflow
      *                           request.
      */
-    default WorkflowRequest getWorkflowRequestBean(String requestId)
+    default WorkflowRequest getWorkflowRequestBean(String requestId, int tenantId)
             throws WorkflowException {
 
         throw new NotImplementedException("Get workflow by request ID functionality is not implemented.");
