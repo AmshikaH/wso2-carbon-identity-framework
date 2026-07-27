@@ -319,7 +319,7 @@ public interface ConfigurationDAO {
             throws ConfigurationManagementException {
 
         throw new ConfigurationManagementException("This method is not implemented", null);
-        }
+    }
 
     /**
      * Delete files for the {@link Resource}.
