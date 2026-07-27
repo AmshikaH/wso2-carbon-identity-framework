@@ -1158,26 +1158,7 @@ public class ConfigurationManagerImpl implements ConfigurationManager {
     }
 
     @Override
-    @Deprecated
     public InputStream getFileById(String resourceType, String resourceName, String fileId)
-            throws ConfigurationManagementException {
-
-        validateRequest(resourceType, resourceName, fileId);
-        InputStream fileStream = getConfigurationDAO().getFileById(resourceType, resourceName, fileId);
-        if (fileStream == null) {
-            if (log.isDebugEnabled()) {
-                log.debug("Resource File: " + fileId + " does not exists.");
-            }
-            throw handleClientException(ERROR_CODE_FILE_DOES_NOT_EXISTS, fileId);
-        }
-        if (log.isDebugEnabled()) {
-            log.debug("Resource file: " + fileId + " retrieved successfully.");
-        }
-        return fileStream;
-    }
-
-    @Override
-    public InputStream getFileByIdAndTenant(String resourceType, String resourceName, String fileId)
             throws ConfigurationManagementException {
 
         validateRequest(resourceType, resourceName, fileId);
@@ -1196,24 +1177,11 @@ public class ConfigurationManagerImpl implements ConfigurationManager {
     }
 
     @Override
-    @Deprecated
     public void deleteFileById(String resourceType, String resourceName, String fileId)
             throws ConfigurationManagementException {
 
         validateRequest(resourceType, resourceName, fileId);
         validateFileExistence(resourceType, resourceName, fileId);
-        getConfigurationDAO().deleteFileById(resourceType, resourceName, fileId);
-        if (log.isDebugEnabled()) {
-            log.debug("File: " + fileId + " successfully deleted.");
-        }
-    }
-
-    @Override
-    public void deleteFileByIdAndTenant(String resourceType, String resourceName, String fileId)
-            throws ConfigurationManagementException {
-
-        validateRequest(resourceType, resourceName, fileId);
-        validateFileExistenceAndTenant(resourceType, resourceName, fileId);
         getConfigurationDAO().deleteFileById(resourceType, resourceName, fileId, getTenantId());
         if (log.isDebugEnabled()) {
             log.debug("File: " + fileId + " successfully deleted.");
@@ -1258,17 +1226,6 @@ public class ConfigurationManagerImpl implements ConfigurationManager {
         }
     }
 
-    private void validateFileExistenceAndTenant(String resourceTypeName, String resourceName, String fileId) throws
-            ConfigurationManagementException {
-
-        if (!isFileExistsAndTenant(resourceTypeName, resourceName, fileId)) {
-            if (log.isDebugEnabled()) {
-                log.debug("A file with the id: " + fileId + " does not exists.");
-            }
-            throw handleClientException(ERROR_CODE_FILE_DOES_NOT_EXISTS, fileId);
-        }
-    }
-
     private void validateFileAddRequest(String resourceTypeName, String resourceName, String fileName,
                                         InputStream fileStream) throws ConfigurationManagementClientException {
 
@@ -1289,20 +1246,6 @@ public class ConfigurationManagerImpl implements ConfigurationManager {
 
         try {
             getFileById(resourceTypeName, resourceName, fileId);
-        } catch (ConfigurationManagementClientException e) {
-            if (isFileNotExistsError(e)) {
-                return false;
-            }
-            throw e;
-        }
-        return true;
-    }
-
-    private boolean isFileExistsAndTenant(String resourceTypeName, String resourceName, String fileId)
-            throws ConfigurationManagementException {
-
-        try {
-            getFileByIdAndTenant(resourceTypeName, resourceName, fileId);
         } catch (ConfigurationManagementClientException e) {
             if (isFileNotExistsError(e)) {
                 return false;

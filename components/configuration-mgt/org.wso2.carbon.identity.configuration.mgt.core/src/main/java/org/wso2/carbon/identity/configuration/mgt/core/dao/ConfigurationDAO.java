@@ -255,7 +255,7 @@ public interface ConfigurationDAO {
     default InputStream getFileById(String resourceType, String resourceName, String fileId, int tenantId)
             throws ConfigurationManagementException {
 
-        throw new ConfigurationManagementException("This method is not implemented", null);
+        return getFileById(resourceType, resourceName, fileId);
     }
 
     /**
@@ -318,7 +318,7 @@ public interface ConfigurationDAO {
     default void deleteFileById(String resourceType, String resourceName, String fileId, int tenantId)
             throws ConfigurationManagementException {
 
-        throw new ConfigurationManagementException("This method is not implemented", null);
+        deleteFileById(resourceType, resourceName, fileId);
     }
 
     /**

@@ -328,21 +328,6 @@ public interface ConfigurationManager {
             throws ConfigurationManagementException;
 
     /**
-     * This API is used to get the given file.
-     *
-     * @param resourceType resource type name.
-     * @param resourceName resource name.
-     * @param fileId       Id representing the file.
-     * @return 200 ok. Returns {@link InputStream} of the file requested.
-     * @throws ConfigurationManagementException Resource management exception.
-     * @deprecated This method does not filter by tenant and may return a file belonging to a different tenant.
-     * Use {@link #getFileByIdAndTenant(String, String, String)} instead.
-     */
-    @Deprecated
-    InputStream getFileById(String resourceType, String resourceName, String fileId)
-            throws ConfigurationManagementException;
-
-    /**
      * This API is used to get the given file, scoped to the tenant resolved from the invocation context.
      *
      * @param resourceType resource type name.
@@ -351,25 +336,7 @@ public interface ConfigurationManager {
      * @return 200 ok. Returns {@link InputStream} of the file requested.
      * @throws ConfigurationManagementException Resource management exception.
      */
-    default InputStream getFileByIdAndTenant(String resourceType, String resourceName, String fileId)
-            throws ConfigurationManagementException {
-
-        throw new ConfigurationManagementException("This method is not implemented", null);
-    }
-
-    /**
-     * This API is used to delete the given file.
-     *
-     * @param resourceType resource type name.
-     * @param resourceName resource name.
-     * @param fileId       Id representing the file.
-     * @return 200 ok.
-     * @throws ConfigurationManagementException Resource management exception.
-     * @deprecated This method does not filter by tenant and may delete a file belonging to a different tenant.
-     * Use {@link #deleteFileByIdAndTenant(String, String, String)} instead.
-     */
-    @Deprecated
-    void deleteFileById(String resourceType, String resourceName, String fileId)
+    InputStream getFileById(String resourceType, String resourceName, String fileId)
             throws ConfigurationManagementException;
 
     /**
@@ -381,11 +348,8 @@ public interface ConfigurationManager {
      * @return 200 ok.
      * @throws ConfigurationManagementException Resource management exception.
      */
-    default void deleteFileByIdAndTenant(String resourceType, String resourceName, String fileId)
-            throws ConfigurationManagementException {
-
-        throw new ConfigurationManagementException("This method is not implemented", null);
-    }
+    void deleteFileById(String resourceType, String resourceName, String fileId)
+            throws ConfigurationManagementException;
 
     /**
      * This function is used to get a resource by the resource id.
