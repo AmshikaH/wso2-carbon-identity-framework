@@ -175,23 +175,23 @@ public class ConfigurationDAOImplTest {
         }
     }
 
-    @Test(description = "Test that getFileByIdAndTenant does not return a file belonging to another tenant",
-            dependsOnMethods = "testAddResource")
+    @Test(description = "Test that getFileById(tenant-scoped overload) does not return a file belonging to "
+            + "another tenant", dependsOnMethods = "testAddResource")
     public void testGetFileByIdAndTenantWithMismatchedTenant() throws Exception {
 
         InputStream dbResourceFile =
-                configurationDAO.getFileByIdAndTenant(OTHER_TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+                configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID, OTHER_TENANT_ID);
         assertNull(dbResourceFile);
     }
 
-    @Test(description = "Test that deleteFileByIdAndTenant does not delete a file belonging to another tenant",
-            dependsOnMethods = "testAddResource")
+    @Test(description = "Test that deleteFileById(tenant-scoped overload) does not delete a file belonging to "
+            + "another tenant", dependsOnMethods = "testAddResource")
     public void testDeleteFileByIdAndTenantWithMismatchedTenant() throws Exception {
 
-        configurationDAO.deleteFileByIdAndTenant(OTHER_TENANT_ID, RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID);
+        configurationDAO.deleteFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID, OTHER_TENANT_ID);
 
-        InputStream dbResourceFile = configurationDAO.getFileByIdAndTenant(TENANT_ID, RESOURCE_TYPE_NAME,
-                RESOURCE_NAME, FILE_ID);
+        InputStream dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID,
+                TENANT_ID);
         String result = new BufferedReader(new InputStreamReader(dbResourceFile, StandardCharsets.UTF_8))
                 .lines()
                 .collect(Collectors.joining("\n"));

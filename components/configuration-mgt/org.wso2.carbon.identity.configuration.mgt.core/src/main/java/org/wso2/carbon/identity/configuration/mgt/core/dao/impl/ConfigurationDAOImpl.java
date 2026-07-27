@@ -1468,7 +1468,7 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
     }
 
     @Override
-    public InputStream getFileByIdAndTenant(int tenantId, String resourceType, String resourceName, String fileId)
+    public InputStream getFileById(String resourceType, String resourceName, String fileId, int tenantId)
             throws ConfigurationManagementException {
 
         JdbcTemplate jdbcTemplate = JdbcUtils.getNewTemplate();
@@ -1477,12 +1477,12 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
                 return jdbcTemplate.withTransaction((template) ->
                         template.fetchSingleRecord(getFileGetByIdWithTenantIdSQL(), (resultSet, rowNumber) ->
                                 resultSet.getBinaryStream(DB_SCHEMA_COLUMN_NAME_VALUE), preparedStatement ->
-                        setPreparedStatementForFileGetById(tenantId, resourceType, resourceName, fileId, preparedStatement)));
+                        setPreparedStatementForFileGetById(resourceType, resourceName, fileId, tenantId, preparedStatement)));
             }
             Blob fileBlob = jdbcTemplate.withTransaction((template) -> template.fetchSingleRecord(
                     getFileGetByIdWithTenantIdSQL(),
                     (resultSet, rowNumber) -> resultSet.getBlob(DB_SCHEMA_COLUMN_NAME_VALUE), preparedStatement ->
-                            setPreparedStatementForFileGetById(tenantId, resourceType, resourceName, fileId,
+                            setPreparedStatementForFileGetById(resourceType, resourceName, fileId, tenantId,
                                     preparedStatement)));
             return fileBlob != null ? fileBlob.getBinaryStream() : null;
         } catch (TransactionException | DataAccessException | SQLException e) {
@@ -1537,7 +1537,7 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
     }
 
     @Override
-    public void deleteFileByIdAndTenant(int tenantId, String resourceType, String resourceName, String fileId)
+    public void deleteFileById(String resourceType, String resourceName, String fileId, int tenantId)
             throws ConfigurationManagementException {
 
         JdbcTemplate jdbcTemplate = JdbcUtils.getNewTemplate();
@@ -1818,8 +1818,8 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
         preparedStatement.setString(3, resourceType);
     }
 
-    private void setPreparedStatementForFileGetById(int tenantId, String resourceType, String resourceName,
-                                                    String fileId, PreparedStatement preparedStatement)
+    private void setPreparedStatementForFileGetById(String resourceType, String resourceName, String fileId,
+                                                    int tenantId, PreparedStatement preparedStatement)
             throws SQLException {
 
         preparedStatement.setString(1, fileId);

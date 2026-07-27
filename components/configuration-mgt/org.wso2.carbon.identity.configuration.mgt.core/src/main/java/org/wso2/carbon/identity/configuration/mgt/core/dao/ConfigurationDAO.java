@@ -237,7 +237,7 @@ public interface ConfigurationDAO {
      * @param fileId       Id of the file.
      * @return {@link InputStream} for the given file id.
      * @deprecated This method does not filter by tenant and may return a file belonging to a different tenant.
-     * Use {@link #getFileByIdAndTenant(int, String, String, String)} instead.
+     * Use {@link #getFileById(String, String, String, int)} instead.
      */
     @Deprecated
     InputStream getFileById(String resourceType, String resourceName, String fileId) throws
@@ -246,13 +246,13 @@ public interface ConfigurationDAO {
     /**
      * Get the file scoped to the given tenant.
      *
-     * @param tenantId     Tenant id of the {@link Resource} owning the file.
      * @param resourceType resource type name.
      * @param resourceName resource name.
      * @param fileId       Id of the file.
+     * @param tenantId     Tenant id of the {@link Resource} owning the file.
      * @return {@link InputStream} for the given file id.
      */
-    default InputStream getFileByIdAndTenant(int tenantId, String resourceType, String resourceName, String fileId)
+    default InputStream getFileById(String resourceType, String resourceName, String fileId, int tenantId)
             throws ConfigurationManagementException {
 
         throw new ConfigurationManagementException("This method is not implemented", null);
@@ -301,7 +301,7 @@ public interface ConfigurationDAO {
      * @param fileId       Id of the file.
      * @return {@link InputStream} for the given file id.
      * @deprecated This method does not filter by tenant and may delete a file belonging to a different tenant.
-     * Use {@link #deleteFileByIdAndTenant(int, String, String, String)} instead.
+     * Use {@link #deleteFileById(String, String, String, int)} instead.
      */
     @Deprecated
     void deleteFileById(String resourceType, String resourceName, String fileId) throws
@@ -310,12 +310,12 @@ public interface ConfigurationDAO {
     /**
      * Delete the file scoped to the given tenant.
      *
-     * @param tenantId     Tenant id of the {@link Resource} owning the file.
      * @param resourceType resource type name.
      * @param resourceName resource name.
      * @param fileId       Id of the file.
+     * @param tenantId     Tenant id of the {@link Resource} owning the file.
      */
-    default void deleteFileByIdAndTenant(int tenantId, String resourceType, String resourceName, String fileId)
+    default void deleteFileById(String resourceType, String resourceName, String fileId, int tenantId)
             throws ConfigurationManagementException {
 
         throw new ConfigurationManagementException("This method is not implemented", null);
