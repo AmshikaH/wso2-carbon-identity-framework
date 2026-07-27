@@ -253,7 +253,7 @@ public class ResourceApiServiceImpl extends ResourceApiService {
             String resourceName) {
 
         try {
-            InputStream fileStream = getConfigurationManager().getFileById(resourceType, resourceName, fileId);
+            InputStream fileStream = getConfigurationManager().getFileById(resourceType,resourceName,fileId);
             return Response.ok().type(MediaType.APPLICATION_OCTET_STREAM).entity(fileStream).build();
         } catch (ConfigurationManagementClientException e) {
             return handleBadRequestResponse(e, LOG);
