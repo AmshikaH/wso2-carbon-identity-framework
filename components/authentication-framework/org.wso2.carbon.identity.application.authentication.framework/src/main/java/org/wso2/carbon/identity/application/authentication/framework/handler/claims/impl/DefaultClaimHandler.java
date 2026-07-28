@@ -188,7 +188,7 @@ public class DefaultClaimHandler implements ClaimHandler {
         }
 
         // Insert the runtime claims from the context. The priority is for runtime claims.
-        remoteClaims.putAll(context.getRuntimeClaims());
+        mergeSessionRuntimeClaims(context, remoteClaims);
 
         // This handles the roles claim of the federated user.
         List<String> federatedUserRolesUnmappedInclusive;
@@ -287,7 +287,7 @@ public class DefaultClaimHandler implements ClaimHandler {
                 localUnfilteredClaimsForNullValues);
 
         // Insert the runtime claims from the context. The priority is for runtime claims.
-        localUnfilteredClaims.putAll(context.getRuntimeClaims());
+        mergeSessionRuntimeClaims(context, localUnfilteredClaims);
 
         if (useAppAssociatedRoles) {
             // Setting the roles claim in localUnfilteredClaims.
@@ -807,7 +807,7 @@ public class DefaultClaimHandler implements ClaimHandler {
         }
 
         // Insert the runtime claims from the context. The priority is for runtime claims.
-        allLocalClaims.putAll(context.getRuntimeClaims());
+        mergeSessionRuntimeClaims(context, allLocalClaims);
 
         handleRoleClaim(context, allLocalClaims);
 
@@ -1420,6 +1420,15 @@ public class DefaultClaimHandler implements ClaimHandler {
 
         return !sequenceConfig.getApplicationConfig().getServiceProvider().getLocalAndOutBoundAuthenticationConfig().
                 isUseUserstoreDomainInRoles();
+    }
+
+    private void mergeSessionRuntimeClaims(AuthenticationContext context, Map<String, String> targetClaims) {
+
+        Object previousUserRuntimeClaims = context.getProperty(FrameworkConstants.PREVIOUS_USER_RUNTIME_CLAIMS);
+        if (previousUserRuntimeClaims instanceof Map) {
+            targetClaims.putAll((Map<String, String>) previousUserRuntimeClaims);
+        }
+        targetClaims.putAll(context.getRuntimeClaims());
     }
 
     /**

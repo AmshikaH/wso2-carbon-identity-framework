@@ -1212,7 +1212,7 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         setServiceProviderInfo(context, effectiveSequence);
 
         // if a value for the sessionContextKey exists user has previously authenticated
-        if (sessionContextKey != null && !isForceAuthEnabled(request)) {
+        if (sessionContextKey != null && !isForceAuthEnabled(request, effectiveSequence)) {
             // Load the session context for the sessionContextKey.
             SessionContext loadedSessionContext = getSessionContext(request, context, sessionContextKey);
             SessionContext sessionContext = null;
@@ -1275,7 +1275,7 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
 
         setServiceProviderInfo(context, effectiveSequence);
 
-        if (sessionContextKey != null && !isForceAuthEnabled(request)) {
+        if (sessionContextKey != null && !isForceAuthEnabled(request, effectiveSequence)) {
             // Load the session context for the sessionContextKey.
             SessionContext loadedSessionContext = getSessionContext(request, context, sessionContextKey);
             SessionContext sessionContext = null;
@@ -1570,8 +1570,12 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
 
         context.setPreviousAuthenticatedIdPs(authenticatedIdPData);
 
-        context.setProperty(FrameworkConstants.RUNTIME_CLAIMS,
-                sessionContext.getProperty(FrameworkConstants.RUNTIME_CLAIMS));
+        Object sessionRuntimeClaims = sessionContext.getProperty(FrameworkConstants.RUNTIME_CLAIMS);
+        if (sessionRuntimeClaims instanceof Map && !((Map<?, ?>) sessionRuntimeClaims).isEmpty()) {
+            String runtimeProperty = FrameworkUtils.isUserScopedRuntimeClaimsEnabled() ?
+                    FrameworkConstants.PREVIOUS_USER_RUNTIME_CLAIMS : FrameworkConstants.RUNTIME_CLAIMS;
+            context.setProperty(runtimeProperty, sessionRuntimeClaims);
+        }
     }
 
     /**
@@ -1934,9 +1938,20 @@ public class DefaultRequestCoordinator extends AbstractRequestCoordinator implem
         }
     }
 
-    private boolean isForceAuthEnabled(HttpServletRequest request) {
+    private boolean isForceAuthEnabled(HttpServletRequest request, SequenceConfig effectiveSequence) {
 
-        return Boolean.parseBoolean(request.getParameter(FORCE_AUTHENTICATE));
+        boolean forceAuthn = false;
+        if (effectiveSequence != null) {
+            AuthenticationGraph authenticationGraph = effectiveSequence.getAuthenticationGraph();
+            if (authenticationGraph != null) {
+                AuthGraphNode startNode = authenticationGraph.getStartNode();
+                if (startNode instanceof StepConfigGraphNode) {
+                    forceAuthn = ((StepConfigGraphNode) startNode).getStepConfig().isForced();
+                }
+            }
+        }
+
+        return Boolean.parseBoolean(request.getParameter(FORCE_AUTHENTICATE)) || forceAuthn;
     }
 
     private static void removeRootDomainCommonAuthCookie(HttpServletRequest request, HttpServletResponse response) {

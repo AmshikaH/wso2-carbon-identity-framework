@@ -456,6 +456,13 @@ public abstract class JsClaims extends AbstractJSContextMemberObject implements 
         if (runtimeClaimValue != null) {
             return runtimeClaimValue;
         }
+        Object previousUserClaims = getContext().getProperty(FrameworkConstants.PREVIOUS_USER_RUNTIME_CLAIMS);
+        if (previousUserClaims instanceof Map) {
+            String sessionClaimValue = ((Map<String, String>) previousUserClaims).get(claimUri);
+            if (sessionClaimValue != null) {
+                return sessionClaimValue;
+            }
+        }
         if (isFederatedIdP()) {
             return getFederatedClaim(claimUri);
         }
@@ -466,6 +473,10 @@ public abstract class JsClaims extends AbstractJSContextMemberObject implements 
 
         String claim = getContext().getRuntimeClaim(claimUri);
         if (claim != null) {
+            return true;
+        }
+        Object previousUserClaims = getContext().getProperty(FrameworkConstants.PREVIOUS_USER_RUNTIME_CLAIMS);
+        if (previousUserClaims instanceof Map && ((Map<?, ?>) previousUserClaims).containsKey(claimUri)) {
             return true;
         }
         if (isFederatedIdP()) {

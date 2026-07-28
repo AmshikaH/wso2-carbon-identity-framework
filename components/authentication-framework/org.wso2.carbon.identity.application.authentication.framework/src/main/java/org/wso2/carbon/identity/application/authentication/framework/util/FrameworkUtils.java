@@ -212,6 +212,7 @@ import static org.wso2.carbon.identity.application.authentication.framework.util
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.CONTEXT_PROP_INVALID_EMAIL_USERNAME;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.CREATED_TIMESTAMP;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.Config.AUTHENTICATION_CONTEXT_EXPIRY_VALIDATION;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.Config.RUNTIME_CLAIMS_ENABLE_PREV_USER_SCOPE_ACCESS;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.Config.SKIP_LOCAL_USER_SEARCH_FOR_AUTHENTICATION_FLOW_HANDLERS;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.Config.USER_SESSION_MAPPING_ENABLED;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.Consent.ENABLE_V2_API_PROPERTY;
@@ -4088,6 +4089,47 @@ public class FrameworkUtils {
             }
             throw new UserSessionException("Error occurred while resolving Id for the user: " + username, e);
         }
+    }
+
+    /**
+     * Returns whether user-scoped runtime claims protection is enabled.
+     * When enabled, runtime claims stored in a previous session are only accessible to users
+     * who authenticated in the flow that produced them.
+     * Disabled by default for backward compatibility.
+     *
+     * @return {@code true} if user-scoped runtime claims are enabled
+     */
+    public static boolean isUserScopedRuntimeClaimsEnabled() {
+
+         return Boolean.parseBoolean(
+               IdentityUtil.getProperty(RUNTIME_CLAIMS_ENABLE_PREV_USER_SCOPE_ACCESS));
+    }
+
+    /**
+     * Resolves a stable identifier for the given authenticated user.
+     * <p>
+     * Attempts to resolve via {@link AuthenticatedUser#getUserId()}. If that throws
+     * {@link UserIdNotFoundException} and the user is federated, falls back to a composite
+     * key of {@code "federatedIdPName:subjectIdentifier"}.
+     *
+     * @param user the authenticated user
+     * @return a stable identifier, or {@code null} if one cannot be resolved
+     */
+    public static String resolveUserId(AuthenticatedUser user) {
+
+        try {
+            String userId = user.getUserId();
+            if (userId != null) {
+                return userId;
+            }
+        } catch (UserIdNotFoundException e) {
+            if (user.isFederatedUser()) {
+                return user.getFederatedIdPName() + ":" + user.getAuthenticatedSubjectIdentifier();
+            }
+            log.warn("Unable to resolve user ID for non-federated user: " + user.getLoggableMaskedUserId()
+                    + ". Runtime claims will not be persisted for this user.");
+        }
+        return null;
     }
 
     /**
