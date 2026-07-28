@@ -248,15 +248,21 @@ public class WorkflowManagementServiceImplTest {
 
         when(mockDAO.getWorkflowRequest(requestId, TENANT_ID)).thenReturn(expectedRequest);
 
-        WorkflowRequest result = service.getWorkflowRequestBean(requestId, TENANT_ID);
+        try (MockedStatic<CarbonContext> mockedCarbonContext = mockStatic(CarbonContext.class)) {
+            CarbonContext mockCarbonContext = mock(CarbonContext.class);
+            mockedCarbonContext.when(CarbonContext::getThreadLocalCarbonContext).thenReturn(mockCarbonContext);
+            when(mockCarbonContext.getTenantId()).thenReturn(TENANT_ID);
 
-        assertNotNull(result, "Returned workflow request should not be null");
-        assertEquals(result.getRequestId(), requestId, "Request ID should match");
-        assertEquals(result.getOperationType(), operation, "Operation type should match");
-        assertEquals(result.getStatus(), status, "Status should match");
-        assertEquals(result.getCreatedBy(), createdBy, "Created by should match");
+            WorkflowRequest result = service.getWorkflowRequestBean(requestId);
 
-        verify(mockDAO).getWorkflowRequest(requestId, TENANT_ID);
+            assertNotNull(result, "Returned workflow request should not be null");
+            assertEquals(result.getRequestId(), requestId, "Request ID should match");
+            assertEquals(result.getOperationType(), operation, "Operation type should match");
+            assertEquals(result.getStatus(), status, "Status should match");
+            assertEquals(result.getCreatedBy(), createdBy, "Created by should match");
+
+            verify(mockDAO).getWorkflowRequest(requestId, TENANT_ID);
+        }
     }
 
     @Test(expectedExceptions = WorkflowClientException.class)
@@ -264,13 +270,13 @@ public class WorkflowManagementServiceImplTest {
 
         when(mockDAO.getWorkflowRequest(INVALID_REQUEST_ID, TENANT_ID))
                 .thenThrow(new WorkflowClientException("Invalid request ID"));
-        service.getWorkflowRequestBean(INVALID_REQUEST_ID, TENANT_ID);
+        service.getWorkflowRequestBean(INVALID_REQUEST_ID);
     }
 
     @Test(expectedExceptions = WorkflowClientException.class)
     public void testGetWorkflowRequestWithNullId() throws Exception {
 
-        service.getWorkflowRequestBean(null, TENANT_ID);
+        service.getWorkflowRequestBean(null);
     }
 
     private void injectMockDAO(String fieldName, Object mockObject) throws Exception {
@@ -1172,9 +1178,15 @@ public class WorkflowManagementServiceImplTest {
                 WFConstant.HT_STATE_SKIPPED);
         verify(mockRequestEntityRelationshipDAO).deleteRelationshipsOfRequest(REQUEST_ID);
 
-        workflowManagementService.permanentlyDeleteWorkflowRequestByAnyUser(REQUEST_ID, TENANT_ID);
+        try (MockedStatic<CarbonContext> mockedCarbonContext = mockStatic(CarbonContext.class)) {
+            CarbonContext mockCarbonContext = mock(CarbonContext.class);
+            mockedCarbonContext.when(CarbonContext::getThreadLocalCarbonContext).thenReturn(mockCarbonContext);
+            when(mockCarbonContext.getTenantId()).thenReturn(TENANT_ID);
 
-        verify(mockWorkflowRequestDAO).deleteRequest(REQUEST_ID, TENANT_ID);
+            workflowManagementService.permanentlyDeleteWorkflowRequestByAnyUser(REQUEST_ID);
+
+            verify(mockWorkflowRequestDAO).deleteRequest(REQUEST_ID, TENANT_ID);
+        }
     }
 
     @Test
@@ -1339,8 +1351,9 @@ public class WorkflowManagementServiceImplTest {
             CarbonContext mockCarbonContext = mock(CarbonContext.class);
             mockedCarbonContext.when(CarbonContext::getThreadLocalCarbonContext).thenReturn(mockCarbonContext);
             when(mockCarbonContext.getTenantDomain()).thenReturn("carbon.super");
+            when(mockCarbonContext.getTenantId()).thenReturn(TENANT_ID);
 
-            WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID, TENANT_ID);
+            WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID);
 
             assertNotNull(result, "Result should not be null");
             assertEquals(result.getRequestId(), REQUEST_ID);
@@ -1382,16 +1395,22 @@ public class WorkflowManagementServiceImplTest {
 
         mockedDataHolder.when(WorkflowServiceDataHolder::getInstance).thenReturn(mockHolder);
 
-        WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID, TENANT_ID);
+        try (MockedStatic<CarbonContext> mockedCarbonContext = mockStatic(CarbonContext.class)) {
+            CarbonContext mockCarbonContext = mock(CarbonContext.class);
+            mockedCarbonContext.when(CarbonContext::getThreadLocalCarbonContext).thenReturn(mockCarbonContext);
+            when(mockCarbonContext.getTenantId()).thenReturn(TENANT_ID);
 
-        assertNotNull(result);
-        assertNotNull(result.getProperties());
-        // Should have only 1 property (username), credential should be filtered out
-        assertEquals(result.getProperties().size(), 1);
-        assertEquals(result.getProperties().get(0).getKey(), "username");
-        assertEquals(result.getProperties().get(0).getValue(), "testuser");
+            WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID);
 
-        verify(mockDAO).getWorkflowRequest(REQUEST_ID, TENANT_ID);
+            assertNotNull(result);
+            assertNotNull(result.getProperties());
+            // Should have only 1 property (username), credential should be filtered out
+            assertEquals(result.getProperties().size(), 1);
+            assertEquals(result.getProperties().get(0).getKey(), "username");
+            assertEquals(result.getProperties().get(0).getValue(), "testuser");
+
+            verify(mockDAO).getWorkflowRequest(REQUEST_ID, TENANT_ID);
+        }
     }
 
     @Test
@@ -1407,14 +1426,20 @@ public class WorkflowManagementServiceImplTest {
 
         mockedDataHolder.when(WorkflowServiceDataHolder::getInstance).thenReturn(mockHolder);
 
-        WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID, TENANT_ID);
+        try (MockedStatic<CarbonContext> mockedCarbonContext = mockStatic(CarbonContext.class)) {
+            CarbonContext mockCarbonContext = mock(CarbonContext.class);
+            mockedCarbonContext.when(CarbonContext::getThreadLocalCarbonContext).thenReturn(mockCarbonContext);
+            when(mockCarbonContext.getTenantId()).thenReturn(TENANT_ID);
 
-        assertNotNull(result);
-        assertEquals(result.getRequestId(), REQUEST_ID);
-        assertNotNull(result.getProperties());
-        assertEquals(result.getProperties().size(), 0);
+            WorkflowRequest result = service.getWorkflowRequestBean(REQUEST_ID);
 
-        verify(mockDAO).getWorkflowRequest(REQUEST_ID, TENANT_ID);
+            assertNotNull(result);
+            assertEquals(result.getRequestId(), REQUEST_ID);
+            assertNotNull(result.getProperties());
+            assertEquals(result.getProperties().size(), 0);
+
+            verify(mockDAO).getWorkflowRequest(REQUEST_ID, TENANT_ID);
+        }
     }
 
     // Helper methods for creating test data

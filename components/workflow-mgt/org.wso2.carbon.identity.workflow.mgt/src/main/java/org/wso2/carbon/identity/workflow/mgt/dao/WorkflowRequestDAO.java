@@ -735,6 +735,7 @@ public class WorkflowRequestDAO {
      * Get full workflow request details by requestId.
      *
      * @param requestId
+     * @param tenantId  Tenant ID.
      * @return WorkflowRequest.
      * @throws InternalWorkflowException
      * @throws WorkflowClientException
