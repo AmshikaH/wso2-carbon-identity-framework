@@ -975,6 +975,30 @@ public class DefaultStepHandler implements StepHandler {
 
             // store authenticated user
             AuthenticatedUser authenticatedUser = context.getSubject();
+            // Discard stale session runtime claims if force auth is configured for this step,
+            // or if a confirmed different user authenticated via a previously seen IdP.
+            if (context.getProperty(FrameworkConstants.PREVIOUS_USER_RUNTIME_CLAIMS) != null) {
+                boolean mismatch = false;
+                if (stepConfig.isForced()) {
+                    // Force auth on this step - discard session runtime claims regardless of user.
+                    mismatch = true;
+                } else {
+                    AuthenticatedIdPData sessionIdPData = context.getPreviousAuthenticatedIdPs().get(idpName);
+                    if (sessionIdPData != null) {
+                        // This IdP was used in the session - check if it is the same user.
+                        String sessionUserId = FrameworkUtils.resolveUserId(sessionIdPData.getUser());
+                        String currentUserId = FrameworkUtils.resolveUserId(authenticatedUser);
+                        if (sessionUserId != null && currentUserId != null
+                                && !sessionUserId.equals(currentUserId)) {
+                            mismatch = true;
+                        }
+                    }
+                    // If the IdP was not seen in the session, we cannot determine a mismatch - leave claims.
+                }
+                if (mismatch) {
+                    context.setProperty(FrameworkConstants.PREVIOUS_USER_RUNTIME_CLAIMS, null);
+                }
+            }
             stepConfig.setAuthenticatedUser(authenticatedUser);
             authenticatedIdPData.setUser(authenticatedUser);
 

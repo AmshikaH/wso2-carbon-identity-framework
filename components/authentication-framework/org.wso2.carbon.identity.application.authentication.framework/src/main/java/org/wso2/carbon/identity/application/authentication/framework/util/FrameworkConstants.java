@@ -186,6 +186,7 @@ public abstract class FrameworkConstants {
     public static final String RUNTIME_PARAMS = "RUNTIME_PARAMS";
     public static final String SP_STANDARD_DIALECT = "SP_STANDARD_DIALECT";
     public static final String RUNTIME_CLAIMS = "RUNTIME_CLAIMS";
+    public static final String PREVIOUS_USER_RUNTIME_CLAIMS = "PREVIOUS_USER_RUNTIME_CLAIMS";
 
     public static final String INPUT_TYPE_IDENTIFIER_FIRST = "idf";
     public static final String INPUT_TYPE_LOGIN_HINT = "login_hint";
@@ -454,6 +455,9 @@ public abstract class FrameworkConstants {
          * Configuration to mark the step as completed on interrupt.
          */
         public static final String MARK_STEP_COMPLETED_ON_INTERRUPT = "MarkStepCompletedOnInterrupt";
+
+        public static final String RUNTIME_CLAIMS_ENABLE_PREV_USER_SCOPE_ACCESS =
+                "AdaptiveAuth.RuntimeClaims.EnablePreviousUserScopedAccess";
 
         private Config() {
         }
