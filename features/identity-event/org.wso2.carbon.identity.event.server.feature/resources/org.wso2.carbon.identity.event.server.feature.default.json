@@ -430,6 +430,14 @@
     "POST_PATCH_ORGANIZATION",
     "PRE_DELETE_ORGANIZATION"
   ],
+  "identity_mgt.events.schemes.authorizedScopesCacheInvalidationHandler.module_index": "64",
+  "identity_mgt.events.schemes.authorizedScopesCacheInvalidationHandler.subscriptions": [
+    "POST_DELETE_API_RESOURCE",
+    "POST_DELETE_API_RESOURCE_SCOPES",
+    "POST_DELETE_SCOPE",
+    "POST_PUT_API_RESOURCE_SCOPES",
+    "POST_UPDATE_API_RESOURCE"
+  ],
   "identity_mgt.events.schemes.moesifUserAuthenticationPublisher.module_index": "65",
   "identity_mgt.events.schemes.moesifUserAuthenticationPublisher.properties.enable": false,
   "identity_mgt.events.schemes.moesifUserAuthenticationPublisher.subscriptions": [
@@ -461,14 +469,6 @@
   "identity_mgt.events.schemes.moesifOAuthTokenIssuancePublisher.properties.enable": false,
   "identity_mgt.events.schemes.moesifOAuthTokenIssuancePublisher.subscriptions": [
     "POST_ISSUE_ACCESS_TOKEN_V2"
-  ],
-  "identity_mgt.events.schemes.authorizedScopesCacheInvalidationHandler.module_index": "64",
-  "identity_mgt.events.schemes.authorizedScopesCacheInvalidationHandler.subscriptions": [
-    "POST_DELETE_API_RESOURCE",
-    "POST_DELETE_API_RESOURCE_SCOPES",
-    "POST_DELETE_SCOPE",
-    "POST_PUT_API_RESOURCE_SCOPES",
-    "POST_UPDATE_API_RESOURCE"
   ],
   "identity_mgt.events.schemes.ConsentEventHook.module_index": "72",
   "identity_mgt.events.schemes.ConsentEventHook.properties.enable": false,
