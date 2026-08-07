@@ -69,12 +69,12 @@
   },
   "basicAuth": {
     "disableBasicAuth" : {
-        "timestampReference" : "{{compatibility_setting.basic_auth.disable_basic_auth.timestamp_reference | default('2026-07-16T00:00:00Z')}}",
+        "timestampReference" : "{{compatibility_setting.basic_auth.disable_basic_auth.timestamp_reference | default('2026-08-13T00:00:00Z')}}",
         "targetValue" : {{compatibility_setting.basic_auth.disable_basic_auth.target_value | default("false")}},
         "defaultValue" : {{compatibility_setting.basic_auth.disable_basic_auth.default_value | default("true")}}
     },
     "allowedEndpoints" : {
-        "timestampReference" : "{{compatibility_setting.basic_auth.allowed_endpoints.timestamp_reference | default('2026-07-16T00:00:00Z')}}",
+        "timestampReference" : "{{compatibility_setting.basic_auth.allowed_endpoints.timestamp_reference | default('2026-08-13T00:00:00Z')}}",
         "targetValue" : "{{compatibility_setting.basic_auth.allowed_endpoints.target_value | default('')}}",
         "defaultValue" : "{{compatibility_setting.basic_auth.allowed_endpoints.default_value | default('')}}"
     }
