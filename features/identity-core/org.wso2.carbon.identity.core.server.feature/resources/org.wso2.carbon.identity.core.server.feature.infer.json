@@ -344,7 +344,8 @@
       "enhanced_organization_authentication.enabled_by_default_for_new_apps" : false,
       "oauth.jarm.enable_jarm_and_form_post_error_response": false,
       "authentication.authenticator.sms_otp.parameters.EnableUserBasedResendBlocking": false,
-      "authentication.authenticator.sms_otp_local.parameters.EnableUserBasedResendBlocking": false
+      "authentication.authenticator.sms_otp_local.parameters.EnableUserBasedResendBlocking": false,
+      "oauth.oidc.honor_multivalued_claim_metadata": false
     },
     "IS_7.1.0": {
       "oauth.dcrm.return_null_fields_in_response": true,
@@ -415,7 +416,8 @@
       "oauth.jarm.enable_jarm_and_form_post_error_response": false,
       "actions.action_request.case_insensitive_header_filtering": false,
       "authentication.authenticator.sms_otp.parameters.EnableUserBasedResendBlocking": false,
-      "authentication.authenticator.sms_otp_local.parameters.EnableUserBasedResendBlocking": false
+      "authentication.authenticator.sms_otp_local.parameters.EnableUserBasedResendBlocking": false,
+      "oauth.oidc.honor_multivalued_claim_metadata": false
     },
     "IS_7.2.0": {
       "authenticationendpoint.authenticator_validation.enabled": false,
@@ -448,7 +450,8 @@
       "oauth.jarm.enable_jarm_and_form_post_error_response": false,
       "actions.action_request.case_insensitive_header_filtering": false,
       "authentication.authenticator.sms_otp.parameters.EnableUserBasedResendBlocking": false,
-      "authentication.authenticator.sms_otp_local.parameters.EnableUserBasedResendBlocking": false
+      "authentication.authenticator.sms_otp_local.parameters.EnableUserBasedResendBlocking": false,
+      "oauth.oidc.honor_multivalued_claim_metadata": false
     }
   }
 }
