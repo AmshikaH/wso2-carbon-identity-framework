@@ -328,7 +328,7 @@ public interface ConfigurationManager {
             throws ConfigurationManagementException;
 
     /**
-     * This API is used to get the given file.
+     * This API is used to get the given file, scoped to the tenant resolved from the invocation context.
      *
      * @param resourceType resource type name.
      * @param resourceName resource name.
@@ -340,7 +340,7 @@ public interface ConfigurationManager {
             throws ConfigurationManagementException;
 
     /**
-     * This API is used to delete the given file.
+     * This API is used to delete the given file, scoped to the tenant resolved from the invocation context.
      *
      * @param resourceType resource type name.
      * @param resourceName resource name.

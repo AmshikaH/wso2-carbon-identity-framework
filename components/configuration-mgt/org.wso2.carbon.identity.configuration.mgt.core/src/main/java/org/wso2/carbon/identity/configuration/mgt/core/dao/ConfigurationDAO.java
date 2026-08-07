@@ -236,9 +236,27 @@ public interface ConfigurationDAO {
      * @param resourceName resource name.
      * @param fileId       Id of the file.
      * @return {@link InputStream} for the given file id.
+     * @deprecated This method does not filter by tenant and may return a file belonging to a different tenant.
+     * Use {@link #getFileById(String, String, String, int)} instead.
      */
+    @Deprecated
     InputStream getFileById(String resourceType, String resourceName, String fileId) throws
             ConfigurationManagementException;
+
+    /**
+     * Get the file scoped to the given tenant.
+     *
+     * @param resourceType resource type name.
+     * @param resourceName resource name.
+     * @param fileId       Id of the file.
+     * @param tenantId     Tenant id of the {@link Resource} owning the file.
+     * @return {@link InputStream} for the given file id.
+     */
+    default InputStream getFileById(String resourceType, String resourceName, String fileId, int tenantId)
+            throws ConfigurationManagementException {
+
+        return getFileById(resourceType, resourceName, fileId);
+    }
 
     /**
      * Get files for the {@link Resource}.
@@ -282,9 +300,26 @@ public interface ConfigurationDAO {
      * @param resourceName resource name.
      * @param fileId       Id of the file.
      * @return {@link InputStream} for the given file id.
+     * @deprecated This method does not filter by tenant and may delete a file belonging to a different tenant.
+     * Use {@link #deleteFileById(String, String, String, int)} instead.
      */
+    @Deprecated
     void deleteFileById(String resourceType, String resourceName, String fileId) throws
             ConfigurationManagementException;
+
+    /**
+     * Delete the file scoped to the given tenant.
+     *
+     * @param resourceType resource type name.
+     * @param resourceName resource name.
+     * @param fileId       Id of the file.
+     * @param tenantId     Tenant id of the {@link Resource} owning the file.
+     */
+    default void deleteFileById(String resourceType, String resourceName, String fileId, int tenantId)
+            throws ConfigurationManagementException {
+
+        deleteFileById(resourceType, resourceName, fileId);
+    }
 
     /**
      * Delete files for the {@link Resource}.

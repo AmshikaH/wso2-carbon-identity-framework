@@ -148,6 +148,7 @@ import static org.wso2.carbon.identity.configuration.mgt.core.constant.Configura
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.SQLConstants.DELETE_ATTRIBUTE_SQL;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.SQLConstants.DELETE_FILES_SQL;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.SQLConstants.DELETE_FILE_SQL;
+import static org.wso2.carbon.identity.configuration.mgt.core.constant.SQLConstants.DELETE_FILE_WITH_TENANT_ID_SQL;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.SQLConstants.DELETE_RESOURCE_ATTRIBUTES_SQL;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.SQLConstants.GET_ATTRIBUTES_BY_RESOURCE_ID_SQL;
 import static org.wso2.carbon.identity.configuration.mgt.core.constant.SQLConstants.GET_FILES_BY_RESOURCE_ID_SQL;
@@ -1445,6 +1446,7 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
     }
 
     @Override
+    @Deprecated
     public InputStream getFileById(String resourceType, String resourceName, String fileId) throws ConfigurationManagementException {
 
         JdbcTemplate jdbcTemplate = JdbcUtils.getNewTemplate();
@@ -1466,6 +1468,30 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
     }
 
     @Override
+    public InputStream getFileById(String resourceType, String resourceName, String fileId, int tenantId)
+            throws ConfigurationManagementException {
+
+        JdbcTemplate jdbcTemplate = JdbcUtils.getNewTemplate();
+        try {
+            if (isPostgreSQLDB()) {
+                return jdbcTemplate.withTransaction((template) ->
+                        template.fetchSingleRecord(getFileGetByIdWithTenantIdSQL(), (resultSet, rowNumber) ->
+                                resultSet.getBinaryStream(DB_SCHEMA_COLUMN_NAME_VALUE), preparedStatement ->
+                        setPreparedStatementForFileGetById(resourceType, resourceName, fileId, tenantId, preparedStatement)));
+            }
+            Blob fileBlob = jdbcTemplate.withTransaction((template) -> template.fetchSingleRecord(
+                    getFileGetByIdWithTenantIdSQL(),
+                    (resultSet, rowNumber) -> resultSet.getBlob(DB_SCHEMA_COLUMN_NAME_VALUE), preparedStatement ->
+                            setPreparedStatementForFileGetById(resourceType, resourceName, fileId, tenantId,
+                                    preparedStatement)));
+            return fileBlob != null ? fileBlob.getBinaryStream() : null;
+        } catch (TransactionException | DataAccessException | SQLException e) {
+            throw handleServerException(ERROR_CODE_GET_FILE, fileId, e);
+        }
+    }
+
+    @Override
+    @Deprecated
     public void deleteFileById(String resourceType, String resourceName, String fileId) throws ConfigurationManagementException {
 
         JdbcTemplate jdbcTemplate = JdbcUtils.getNewTemplate();
@@ -1485,6 +1511,60 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
                         });
                 template.executeUpdate(DELETE_FILE_SQL, (
                         preparedStatement -> preparedStatement.setString(1, fileId)
+                ));
+
+                List<String> availableFilesForTheResource = template.executeQuery(GET_FILES_BY_RESOURCE_ID_SQL,
+                        ((resultSet, rowNumber) -> resultSet.getString(DB_SCHEMA_COLUMN_NAME_ID)),
+                        preparedStatement -> preparedStatement.setString(1, resourceId));
+                if (availableFilesForTheResource.isEmpty()) {
+                    template.executeUpdate(UPDATE_HAS_FILE_SQL, preparedStatement -> {
+                        if (isOracleOrMssql) {
+                            preparedStatement.setInt(1, 0);
+                        } else {
+                            preparedStatement.setBoolean(1, false);
+                        }
+                        preparedStatement.setString(2, resourceId);
+                    });
+                }
+                updateResourceLastModified(template, resourceId);
+                return null;
+            });
+        } catch (TransactionException e) {
+            throw handleServerException(ERROR_CODE_DELETE_FILE, fileId, e);
+        } catch (DataAccessException e) {
+            throw handleServerException(ERROR_CODE_CHECK_DB_METADATA, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void deleteFileById(String resourceType, String resourceName, String fileId, int tenantId)
+            throws ConfigurationManagementException {
+
+        JdbcTemplate jdbcTemplate = JdbcUtils.getNewTemplate();
+        try {
+            boolean isOracleOrMssql = isOracleDB() || isMSSqlDB();
+            jdbcTemplate.withTransaction(template -> {
+
+                // Get resource id for the deleting file.
+                String sqlStmt = isH2DB() ? SQLConstants.GET_FILE_BY_ID_WITH_TENANT_ID_SQL_H2 :
+                        SQLConstants.GET_FILE_BY_ID_WITH_TENANT_ID_SQL;
+
+                String resourceId = template.fetchSingleRecord(sqlStmt,
+                        (resultSet, rowNumber) -> resultSet.getString(DB_SCHEMA_COLUMN_NAME_RESOURCE_ID),
+                        preparedStatement -> {
+                            preparedStatement.setString(1, fileId);
+                            preparedStatement.setString(2, resourceName);
+                            preparedStatement.setString(3, resourceType);
+                            preparedStatement.setInt(4, tenantId);
+                        });
+                if (resourceId == null) {
+                    return null;
+                }
+                template.executeUpdate(DELETE_FILE_WITH_TENANT_ID_SQL, (
+                        preparedStatement -> {
+                            preparedStatement.setString(1, fileId);
+                            preparedStatement.setInt(2, tenantId);
+                        }
                 ));
 
                 List<String> availableFilesForTheResource = template.executeQuery(GET_FILES_BY_RESOURCE_ID_SQL,
@@ -1738,8 +1818,24 @@ public class ConfigurationDAOImpl implements ConfigurationDAO {
         preparedStatement.setString(3, resourceType);
     }
 
+    private void setPreparedStatementForFileGetById(String resourceType, String resourceName, String fileId,
+                                                    int tenantId, PreparedStatement preparedStatement)
+            throws SQLException {
+
+        preparedStatement.setString(1, fileId);
+        preparedStatement.setString(2, resourceName);
+        preparedStatement.setString(3, resourceType);
+        preparedStatement.setInt(4, tenantId);
+    }
+
     private String getFileGetByIdSQL() throws DataAccessException{
 
         return isH2DB() ? SQLConstants.GET_FILE_BY_ID_SQL_H2 : SQLConstants.GET_FILE_BY_ID_SQL;
+    }
+
+    private String getFileGetByIdWithTenantIdSQL() throws DataAccessException{
+
+        return isH2DB() ? SQLConstants.GET_FILE_BY_ID_WITH_TENANT_ID_SQL_H2 :
+                SQLConstants.GET_FILE_BY_ID_WITH_TENANT_ID_SQL;
     }
 }

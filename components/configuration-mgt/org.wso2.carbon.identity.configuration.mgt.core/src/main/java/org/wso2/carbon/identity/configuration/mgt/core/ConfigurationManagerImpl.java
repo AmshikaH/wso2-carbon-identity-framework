@@ -1162,7 +1162,8 @@ public class ConfigurationManagerImpl implements ConfigurationManager {
             throws ConfigurationManagementException {
 
         validateRequest(resourceType, resourceName, fileId);
-        InputStream fileStream = getConfigurationDAO().getFileById(resourceType, resourceName, fileId);
+        InputStream fileStream = getConfigurationDAO().getFileById(resourceType, resourceName, fileId,
+                getTenantId());
         if (fileStream == null) {
             if (log.isDebugEnabled()) {
                 log.debug("Resource File: " + fileId + " does not exists.");
@@ -1181,7 +1182,7 @@ public class ConfigurationManagerImpl implements ConfigurationManager {
 
         validateRequest(resourceType, resourceName, fileId);
         validateFileExistence(resourceType, resourceName, fileId);
-        getConfigurationDAO().deleteFileById(resourceType, resourceName, fileId);
+        getConfigurationDAO().deleteFileById(resourceType, resourceName, fileId, getTenantId());
         if (log.isDebugEnabled()) {
             log.debug("File: " + fileId + " successfully deleted.");
         }

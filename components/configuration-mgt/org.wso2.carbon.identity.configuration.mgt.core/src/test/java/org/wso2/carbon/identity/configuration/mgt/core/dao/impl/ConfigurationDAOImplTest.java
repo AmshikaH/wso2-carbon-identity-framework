@@ -81,6 +81,7 @@ public class ConfigurationDAOImplTest {
     private static final String FILE_CONTENT = "This is a test file content.";
     private static final String TENANT_DOMAIN = "test-tenant-domain";
     private static final int TENANT_ID = 1;
+    private static final int OTHER_TENANT_ID = 2;
 
     private MockedStatic<IdentityTenantUtil> tenantUtilMockedStatic;
 
@@ -174,6 +175,29 @@ public class ConfigurationDAOImplTest {
         }
     }
 
+    @Test(description = "Test that getFileById(tenant-scoped overload) does not return a file belonging to "
+            + "another tenant", dependsOnMethods = "testAddResource")
+    public void testGetFileByIdAndTenantWithMismatchedTenant() throws Exception {
+
+        InputStream dbResourceFile =
+                configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID, OTHER_TENANT_ID);
+        assertNull(dbResourceFile);
+    }
+
+    @Test(description = "Test that deleteFileById(tenant-scoped overload) does not delete a file belonging to "
+            + "another tenant", dependsOnMethods = "testAddResource")
+    public void testDeleteFileByIdAndTenantWithMismatchedTenant() throws Exception {
+
+        configurationDAO.deleteFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID, OTHER_TENANT_ID);
+
+        InputStream dbResourceFile = configurationDAO.getFileById(RESOURCE_TYPE_NAME, RESOURCE_NAME, FILE_ID,
+                TENANT_ID);
+        String result = new BufferedReader(new InputStreamReader(dbResourceFile, StandardCharsets.UTF_8))
+                .lines()
+                .collect(Collectors.joining("\n"));
+        assertEquals(FILE_CONTENT, result);
+    }
+
     @Test(description = "Test for getFiles method", dependsOnMethods = "testAddResource")
     public void testGetFiles() throws Exception {
 
@@ -193,7 +217,8 @@ public class ConfigurationDAOImplTest {
     }
 
     @Test(description = "Test deleteResourceByName method", dependsOnMethods = {"testAddResource", "testGetFileById",
-            "testGetFiles"})
+            "testGetFiles", "testGetFileByIdAndTenantWithMismatchedTenant",
+            "testDeleteFileByIdAndTenantWithMismatchedTenant"})
     public void testDeleteResourceByName() throws Exception {
 
         // Successfully delete a resource by its name.
