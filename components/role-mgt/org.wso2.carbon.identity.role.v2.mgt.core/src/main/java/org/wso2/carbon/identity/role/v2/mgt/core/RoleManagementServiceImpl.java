@@ -916,7 +916,8 @@ public class RoleManagementServiceImpl implements RoleManagementService {
     }
 
     @Override
-    public List<String> getRoleIdListOfGroupNames(List<String> groupNames, String tenantDomain) throws IdentityRoleManagementException {
+    public List<String> getRoleIdListOfGroupNames(List<String> groupNames, String tenantDomain)
+            throws IdentityRoleManagementException {
 
         List<RoleManagementListener> roleManagementListenerList = RoleManagementServiceComponentHolder.getInstance()
                 .getRoleManagementListenerList();
