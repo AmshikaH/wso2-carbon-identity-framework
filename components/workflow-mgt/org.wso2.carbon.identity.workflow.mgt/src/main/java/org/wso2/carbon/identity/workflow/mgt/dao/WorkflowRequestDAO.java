@@ -244,6 +244,11 @@ public class WorkflowRequestDAO {
         }
     }
 
+    /**
+     * @deprecated This method does not scope the delete to a tenant and may delete a workflow request
+     * belonging to a different tenant. Use {@link #deleteRequest(String, int)} instead.
+     */
+    @Deprecated
     public void deleteRequest(String requestId) throws InternalWorkflowException {
 
         if (log.isDebugEnabled()) {
@@ -257,6 +262,41 @@ public class WorkflowRequestDAO {
             prepStmt = connection.prepareStatement(query);
             prepStmt.setString(1, requestId);
             prepStmt.execute();
+            IdentityDatabaseUtil.commitTransaction(connection);
+        } catch (SQLException e) {
+            IdentityDatabaseUtil.rollbackTransaction(connection);
+            throw new InternalWorkflowException("Error when executing the sql query:" + query, e);
+        } finally {
+            IdentityDatabaseUtil.closeAllConnections(connection, null, prepStmt);
+        }
+    }
+
+    /**
+     * Delete a workflow request scoped to the given tenant.
+     *
+     * @param requestId Request ID.
+     * @param tenantId  Tenant ID.
+     * @throws WorkflowException If an error occurs while deleting the workflow request, or if no request
+     *                           was found for the given ID within the given tenant.
+     */
+    public void deleteRequest(String requestId, int tenantId) throws WorkflowException {
+
+        if (log.isDebugEnabled()) {
+            log.debug("Deleting workflow request with ID: " + requestId);
+        }
+
+        Connection connection = IdentityDatabaseUtil.getDBConnection(true);
+        PreparedStatement prepStmt = null;
+        String query = SQLConstants.DELETE_REQUEST_WITH_TENANT_ID;
+        try {
+            prepStmt = connection.prepareStatement(query);
+            prepStmt.setString(1, requestId);
+            prepStmt.setInt(2, tenantId);
+            int rowsAffected = prepStmt.executeUpdate();
+            if (rowsAffected == 0) {
+                IdentityDatabaseUtil.rollbackTransaction(connection);
+                throw new WorkflowClientException("Workflow request not found with ID: " + requestId);
+            }
             IdentityDatabaseUtil.commitTransaction(connection);
         } catch (SQLException e) {
             IdentityDatabaseUtil.rollbackTransaction(connection);
@@ -734,7 +774,10 @@ public class WorkflowRequestDAO {
      * @throws InternalWorkflowException
      * @throws WorkflowClientException
      * @throws ClassNotFoundException
+     * @deprecated This method does not scope the lookup to a tenant and may return a workflow request
+     * belonging to a different tenant. Use {@link #getWorkflowRequest(String, int)} instead.
      */
+    @Deprecated
     public org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest getWorkflowRequest(String requestId)
             throws WorkflowException {
 
@@ -752,7 +795,7 @@ public class WorkflowRequestDAO {
             resultSet = prepStmt.executeQuery();
 
             if (resultSet.next()) {
-                org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest requestDTO = 
+                org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest requestDTO =
                     new org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest();
 
                 requestDTO.setRequestId(resultSet.getString(SQLConstants.REQUEST_UUID_COLUMN));
@@ -779,8 +822,73 @@ public class WorkflowRequestDAO {
                 throw new WorkflowClientException("Workflow request not found with ID: " + requestId);
             }
         } catch (SQLException e) {
-            throw new InternalWorkflowException("Error when executing the sql query:" + 
+            throw new InternalWorkflowException("Error when executing the sql query:" +
                     SQLConstants.GET_FULL_WORKFLOW_REQUEST_QUERY, e);
+        } catch (ClassNotFoundException | IOException e) {
+            throw new InternalWorkflowException(
+                    "Error when deserializing the workflow request. requestId = " + requestId, e);
+        } finally {
+            IdentityDatabaseUtil.closeAllConnections(connection, resultSet, prepStmt);
+        }
+    }
+
+    /**
+     * Get full workflow request details by requestId, scoped to the given tenant.
+     *
+     * @param requestId Request ID.
+     * @param tenantId  Tenant ID.
+     * @return WorkflowRequest.
+     * @throws InternalWorkflowException
+     * @throws WorkflowClientException
+     * @throws ClassNotFoundException
+     */
+    public org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest getWorkflowRequest(String requestId, int tenantId)
+            throws WorkflowException {
+
+        if (requestId == null || requestId.isEmpty()) {
+            throw new WorkflowClientException("Request ID cannot be null or empty.");
+        }
+
+        Connection connection = IdentityDatabaseUtil.getDBConnection(false);
+        PreparedStatement prepStmt = null;
+        ResultSet resultSet = null;
+
+        try {
+            prepStmt = connection.prepareStatement(SQLConstants.GET_FULL_WORKFLOW_REQUEST_QUERY_WITH_TENANT_ID);
+            prepStmt.setString(1, requestId);
+            prepStmt.setInt(2, tenantId);
+            resultSet = prepStmt.executeQuery();
+
+            if (resultSet.next()) {
+                org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest requestDTO =
+                    new org.wso2.carbon.identity.workflow.mgt.bean.WorkflowRequest();
+
+                requestDTO.setRequestId(resultSet.getString(SQLConstants.REQUEST_UUID_COLUMN));
+                requestDTO.setOperationType(resultSet.getString(SQLConstants.REQUEST_OPERATION_TYPE_COLUMN));
+                requestDTO.setCreatedAt(
+                        resultSet.getTimestamp(SQLConstants.REQUEST_CREATED_AT_COLUMN).toInstant().toString());
+                requestDTO.setUpdatedAt(
+                        resultSet.getTimestamp(SQLConstants.REQUEST_UPDATED_AT_COLUMN).toInstant().toString());
+                requestDTO.setStatus(resultSet.getString(SQLConstants.REQUEST_STATUS_COLUMN));
+                requestDTO.setCreatedBy(resultSet.getString(SQLConstants.CREATED_BY_COLUMN));
+
+                byte[] requestBytes = resultSet.getBytes(SQLConstants.REQUEST_COLUMN);
+                WorkflowRequest workflowRequest = null;
+                if (requestBytes != null && requestBytes.length > 0) {
+                    workflowRequest = deserializeWorkflowRequest(requestBytes);
+                }
+                if (workflowRequest != null) {
+                    requestDTO.setRequestParams(workflowRequest.getRequestParameterAsString());
+                    requestDTO.setRequestParameters(workflowRequest.getRequestParameters());
+                }
+
+                return requestDTO;
+            } else {
+                throw new WorkflowClientException("Workflow request not found with ID: " + requestId);
+            }
+        } catch (SQLException e) {
+            throw new InternalWorkflowException("Error when executing the sql query:" +
+                    SQLConstants.GET_FULL_WORKFLOW_REQUEST_QUERY_WITH_TENANT_ID, e);
         } catch (ClassNotFoundException | IOException e) {
             throw new InternalWorkflowException(
                     "Error when deserializing the workflow request. requestId = " + requestId, e);

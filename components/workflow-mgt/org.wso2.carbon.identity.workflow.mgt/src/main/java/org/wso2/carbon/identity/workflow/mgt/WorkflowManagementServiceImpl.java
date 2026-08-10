@@ -1159,6 +1159,7 @@ public class WorkflowManagementServiceImpl implements WorkflowManagementService 
     @Override
     public void permanentlyDeleteWorkflowRequestByAnyUser(String requestId) throws WorkflowException {
 
+        int tenantId = CarbonContext.getThreadLocalCarbonContext().getTenantId();
         List<WorkflowListener> workflowListenerList =
                 WorkflowServiceDataHolder.getInstance().getWorkflowListenerList();
         WorkflowRequest workflowRequest = new WorkflowRequest();
@@ -1171,7 +1172,7 @@ public class WorkflowManagementServiceImpl implements WorkflowManagementService 
             }
         }
 
-        workflowRequestDAO.deleteRequest(requestId);
+        workflowRequestDAO.deleteRequest(requestId, tenantId);
 
         for (WorkflowListener workflowListener : workflowListenerList) {
             if (workflowListener.isEnable()) {
@@ -1331,8 +1332,8 @@ public class WorkflowManagementServiceImpl implements WorkflowManagementService 
                 workflowListener.doPreGetWorkflowRequest(requestId);
             }
         }
-
-        WorkflowRequest workflowRequest = workflowRequestDAO.getWorkflowRequest(requestId);
+        int tenantId = CarbonContext.getThreadLocalCarbonContext().getTenantId();
+        WorkflowRequest workflowRequest = workflowRequestDAO.getWorkflowRequest(requestId, tenantId);
         if (workflowRequest == null) {
             String errorMessage = "Workflow request not found with ID: " + requestId;
             log.debug(errorMessage);

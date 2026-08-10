@@ -82,8 +82,16 @@ public class SQLConstants {
     public static final String GET_WORKFLOW_REQUEST_QUERY = "SELECT UUID, REQUEST, STATUS, CREATED_BY FROM WF_REQUEST" +
             " WHERE UUID = ?";
 
+    /**
+     * @deprecated This query does not filter by tenant and may return a workflow request belonging to a
+     * different tenant. Use {@link #GET_FULL_WORKFLOW_REQUEST_QUERY_WITH_TENANT_ID} instead.
+     */
+    @Deprecated
     public static final String GET_FULL_WORKFLOW_REQUEST_QUERY = "SELECT UUID, REQUEST, STATUS, " +
             "CREATED_BY, OPERATION_TYPE, CREATED_AT, UPDATED_AT FROM WF_REQUEST WHERE UUID = ?";
+
+    public static final String GET_FULL_WORKFLOW_REQUEST_QUERY_WITH_TENANT_ID = "SELECT UUID, REQUEST, STATUS, " +
+            "CREATED_BY, OPERATION_TYPE, CREATED_AT, UPDATED_AT FROM WF_REQUEST WHERE UUID = ? AND TENANT_ID = ?";
 
     public static final String ABORT_WORKFLOW_REQUEST_BY_WORKFLOW_ID = "UPDATE WF_REQUEST SET STATUS = 'ABORTED', " +
             "UPDATED_AT = ? WHERE UUID IN (SELECT REQUEST_ID FROM WF_WORKFLOW_REQUEST_RELATION WHERE WORKFLOW_ID = ? " +
@@ -92,7 +100,15 @@ public class SQLConstants {
     public static final String UPDATE_STATUS_OF_REQUEST = "UPDATE WF_REQUEST SET STATUS = ? , UPDATED_AT = ? WHERE " +
             "UUID = ?";
 
+    /**
+     * @deprecated This query does not filter by tenant and may delete a workflow request belonging to a
+     * different tenant. Use {@link #DELETE_REQUEST_WITH_TENANT_ID} instead.
+     */
+    @Deprecated
     public static final String DELETE_REQUEST = "DELETE FROM WF_REQUEST WHERE UUID = ?";
+
+    public static final String DELETE_REQUEST_WITH_TENANT_ID =
+            "DELETE FROM WF_REQUEST WHERE UUID = ? AND TENANT_ID = ?";
 
     public static final String UPDATE_UPDATED_AT_OF_REQUEST = "UPDATE WF_REQUEST SET UPDATED_AT = ? WHERE UUID = ?";
 

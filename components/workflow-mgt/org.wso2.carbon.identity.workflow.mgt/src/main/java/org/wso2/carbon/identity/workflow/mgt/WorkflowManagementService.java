@@ -400,7 +400,7 @@ public interface WorkflowManagementService {
 
     }
     /**
-     * permanently delete workflow requests created by any user.
+     * permanently delete workflow requests created by any user, scoped to the given tenant.
      *
      * @param requestId  Request ID.
      * @throws WorkflowException
