@@ -97,6 +97,7 @@ import static org.wso2.carbon.identity.application.authentication.framework.hand
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.ALLOW_LOGIN_TO_IDP;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.Config.SEND_ONLY_LOCALLY_MAPPED_ROLES_OF_IDP;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.EMAIL_ADDRESS_CLAIM;
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.RESOLVE_EXISTING_USER_BEFORE_CONSENT_PROMPT;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkErrorConstants.ErrorMessages.ERROR_WHILE_ENCRYPTING_TOTP_SECRET_KEY;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkErrorConstants.ErrorMessages.ERROR_WHILE_GETTING_IDP_BY_NAME;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkErrorConstants.ErrorMessages.ERROR_WHILE_GETTING_REALM_IN_POST_AUTHENTICATION;
@@ -339,6 +340,17 @@ public class JITProvisioningPostAuthenticationHandler extends AbstractPostAuthnH
                     boolean isUserAllowsToLoginIdp =  Boolean.parseBoolean(IdentityUtil
                             .getProperty(ALLOW_LOGIN_TO_IDP));
 
+                    // When enabled, link the federated identity to an existing local account before the
+                    // prompt-consent sign-up redirect, so an existing user is logged in instead of being
+                    // redirected to the sign-up form.
+                    if (isResolveExistingUserBeforeConsentPromptEnabled()
+                            && externalIdPConfig.isAssociateLocalUserEnabled()
+                            && StringUtils.isEmpty(associatedLocalUser)
+                            && externalIdPConfig.isPromptConsentEnabled()) {
+                        associatedLocalUser = resolveAndAssociateExistingLocalUser(externalIdPConfig, context,
+                                localClaimValues, federatedClaimValues, stepConfig.getAuthenticatedIdP(),
+                                externalSubject);
+                    }
                     // If associatedLocalUser is null, that means relevant association not exist already.
                     if (StringUtils.isEmpty(associatedLocalUser) && externalIdPConfig.isPromptConsentEnabled()) {
                         if (log.isDebugEnabled()) {
@@ -355,71 +367,9 @@ public class JITProvisioningPostAuthenticationHandler extends AbstractPostAuthnH
                         return PostAuthnHandlerFlowStatus.INCOMPLETE;
                     }
                     if (StringUtils.isEmpty(associatedLocalUser) && externalIdPConfig.isAssociateLocalUserEnabled()) {
-
-                        AccountLookupAttributeMappingConfig[] accountLookupAttributeMappingConfigs =
-                                externalIdPConfig.getAccountLookupAttributeMappings();
-                        boolean isEmailUsernameLookup =
-                                ArrayUtils.isEmpty(accountLookupAttributeMappingConfigs);
-                        if (log.isDebugEnabled()) {
-                            log.debug("Account lookup attribute mappings are not configured for the IDP: "
-                                    + externalIdPConfig.getIdPName() + ". Hence, using email address claim for account "
-                                    + "lookup matching with local username.");
-                        }
-                        if (isEmailUsernameLookup &&
-                                StringUtils.isNotBlank(localClaimValues.get(EMAIL_ADDRESS_CLAIM))) {
-                            try {
-                                String emailUsername = localClaimValues.get(EMAIL_ADDRESS_CLAIM);
-                                UserRealm realm = getUserRealm(context.getTenantDomain());
-                                AbstractUserStoreManager userStoreManager =
-                                        (AbstractUserStoreManager) getUserStoreManager(context.getExternalIdP()
-                                                .getProvisioningUserStoreId(), realm, emailUsername);
-                                if (userStoreManager.isExistingUser(emailUsername)) {
-                                    org.wso2.carbon.user.core.common.User user =
-                                            userStoreManager.getUser(null, emailUsername);
-                                    //associate user
-                                    FrameworkUtils.getFederatedAssociationManager()
-                                            .createFederatedAssociation(new User(user),
-                                                    stepConfig.getAuthenticatedIdP(),
-                                                    externalSubject);
-                                    associatedLocalUser = user.getDomainQualifiedUsername();
-                                }
-                            } catch (UserStoreException e) {
-                                handleExceptions(ErrorMessages.ERROR_WHILE_CHECKING_USERNAME_EXISTENCE.getMessage(),
-                                        "error.user.existence", e);
-                            } catch (FrameworkException | FederatedAssociationManagerException e) {
-                                handleExceptions(e.getMessage(), e.getErrorCode(), e);
-                            }
-                        } else {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Account lookup attribute mappings configured for IDP: " +
-                                        externalIdPConfig.getIdPName() + ". Attempting to match user using mapped " +
-                                        "attributes.");
-                            }
-                            Map<String, String> localClaimValuesForLookup =
-                                    getLocalClaimsForAccountLookup(federatedClaimValues,
-                                            externalIdPConfig.getAccountLookupAttributeMappings());
-
-                            org.wso2.carbon.user.core.common.User user = getLocalUser(context.getTenantDomain(),
-                                    externalIdPConfig.getProvisioningUserStoreId(), localClaimValuesForLookup);
-
-                            try {
-                                if (user != null) {
-                                    FrameworkUtils.getFederatedAssociationManager()
-                                            .createFederatedAssociation(new User(user),
-                                                    stepConfig.getAuthenticatedIdP(),
-                                                    externalSubject);
-                                    associatedLocalUser = user.getDomainQualifiedUsername();
-                                } else {
-                                    if (log.isDebugEnabled()) {
-                                        log.debug("No local user found for the account lookup attributes: "
-                                                + localClaimValuesForLookup + " in tenant domain: "
-                                                + context.getTenantDomain());
-                                    }
-                                }
-                            } catch (FederatedAssociationManagerException | FrameworkException e) {
-                                handleExceptions(e.getMessage(), e.getErrorCode(), e);
-                            }
-                        }
+                        associatedLocalUser = resolveAndAssociateExistingLocalUser(externalIdPConfig, context,
+                                localClaimValues, federatedClaimValues, stepConfig.getAuthenticatedIdP(),
+                                externalSubject);
                     }
                     if (externalIdPConfig.isSkipJITOnAttrAccountLookupEnabled() &&
                             StringUtils.isEmpty(associatedLocalUser)) {
@@ -824,6 +774,99 @@ public class JITProvisioningPostAuthenticationHandler extends AbstractPostAuthnH
             throws PostAuthenticationFailedException {
 
         throw new PostAuthenticationFailedException(errorCode, errorMessage, e);
+    }
+
+    /**
+     * Whether resolving an existing local user before the prompt-consent sign-up redirect is enabled.
+     *
+     * @return true if resolving existing users before prompt consent is enabled.
+     */
+    private boolean isResolveExistingUserBeforeConsentPromptEnabled() {
+
+        return Boolean.parseBoolean(IdentityUtil.getProperty(RESOLVE_EXISTING_USER_BEFORE_CONSENT_PROMPT));
+    }
+
+    /**
+     * Resolve an existing local account for the federated user and create the federated association for it.
+     * The local account is matched either by the account lookup attribute mappings configured for the IdP, or,
+     * when no such mappings are configured, by the email address claim matched against the local username.
+     *
+     * @param externalIdPConfig    Relevant external IdP.
+     * @param context              Authentication context.
+     * @param localClaimValues     Local claim values of the federated user.
+     * @param federatedClaimValues Claim values as received from the federated IdP.
+     * @param authenticatedIdP     The federated IdP name.
+     * @param externalSubject      The federated subject identifier.
+     * @return The domain-qualified username of the linked local account, or null when no matching account exists.
+     * @throws PostAuthenticationFailedException If the user-store lookup or the association fails.
+     */
+    private String resolveAndAssociateExistingLocalUser(ExternalIdPConfig externalIdPConfig,
+                                                        AuthenticationContext context,
+                                                        Map<String, String> localClaimValues,
+                                                        Map<ClaimMapping, String> federatedClaimValues,
+                                                        String authenticatedIdP, String externalSubject)
+            throws PostAuthenticationFailedException {
+
+        String associatedLocalUser = null;
+        AccountLookupAttributeMappingConfig[] accountLookupAttributeMappingConfigs =
+                externalIdPConfig.getAccountLookupAttributeMappings();
+        boolean isEmailUsernameLookup = ArrayUtils.isEmpty(accountLookupAttributeMappingConfigs);
+        if (log.isDebugEnabled()) {
+            log.debug("Account lookup attribute mappings are not configured for the IDP: "
+                    + externalIdPConfig.getIdPName() + ". Hence, using email address claim for account "
+                    + "lookup matching with local username.");
+        }
+        if (isEmailUsernameLookup && StringUtils.isNotBlank(localClaimValues.get(EMAIL_ADDRESS_CLAIM))) {
+            try {
+                String emailUsername = localClaimValues.get(EMAIL_ADDRESS_CLAIM);
+                UserRealm realm = getUserRealm(context.getTenantDomain());
+                AbstractUserStoreManager userStoreManager =
+                        (AbstractUserStoreManager) getUserStoreManager(context.getExternalIdP()
+                                .getProvisioningUserStoreId(), realm, emailUsername);
+                if (userStoreManager.isExistingUser(emailUsername)) {
+                    org.wso2.carbon.user.core.common.User user =
+                            userStoreManager.getUser(null, emailUsername);
+                    //associate user
+                    FrameworkUtils.getFederatedAssociationManager()
+                            .createFederatedAssociation(new User(user), authenticatedIdP, externalSubject);
+                    associatedLocalUser = user.getDomainQualifiedUsername();
+                }
+            } catch (UserStoreException e) {
+                handleExceptions(ErrorMessages.ERROR_WHILE_CHECKING_USERNAME_EXISTENCE.getMessage(),
+                        "error.user.existence", e);
+            } catch (FrameworkException | FederatedAssociationManagerException e) {
+                handleExceptions(e.getMessage(), e.getErrorCode(), e);
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Account lookup attribute mappings configured for IDP: " +
+                        externalIdPConfig.getIdPName() + ". Attempting to match user using mapped " +
+                        "attributes.");
+            }
+            Map<String, String> localClaimValuesForLookup =
+                    getLocalClaimsForAccountLookup(federatedClaimValues,
+                            externalIdPConfig.getAccountLookupAttributeMappings());
+
+            org.wso2.carbon.user.core.common.User user = getLocalUser(context.getTenantDomain(),
+                    externalIdPConfig.getProvisioningUserStoreId(), localClaimValuesForLookup);
+
+            try {
+                if (user != null) {
+                    FrameworkUtils.getFederatedAssociationManager()
+                            .createFederatedAssociation(new User(user), authenticatedIdP, externalSubject);
+                    associatedLocalUser = user.getDomainQualifiedUsername();
+                } else {
+                    if (log.isDebugEnabled()) {
+                        log.debug("No local user found for the account lookup attributes: "
+                                + localClaimValuesForLookup + " in tenant domain: "
+                                + context.getTenantDomain());
+                    }
+                }
+            } catch (FederatedAssociationManagerException | FrameworkException e) {
+                handleExceptions(e.getMessage(), e.getErrorCode(), e);
+            }
+        }
+        return associatedLocalUser;
     }
 
     /**
